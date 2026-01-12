@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Control Administrativo - {{ translations.app_title }}</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    
+    <!-- Custom CSS with Black Theme -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- SEO and Accessibility Meta Tags -->
+    <meta name="description" content="Panel de Control Administrativo - Rock and Roll Forum Jam en Español - Gestión de Presentaciones en Vivo">
+    <meta name="keywords" content="admin, control, rock, roll, música, presentación, vivo, gestión">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#000000">
+    <meta name="author" content="Rock and Roll Forum Jam en Español">
+    
+    <style>
+        /* Admin-specific styles */
+        .admin-header {
+            background: linear-gradient(135deg, var(--dark-gray) 0%, var(--secondary-black) 100%);
+            border-bottom: 3px solid var(--accent-gold);
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .admin-card {
+            background: var(--bg-card);
+            border: 2px solid var(--border-primary);
+            backdrop-filter: blur(15px);
+            border-radius: 1rem;
+            box-shadow: 0 8px 32px var(--shadow-medium);
+        }
+        
+        .admin-card .card-header {
+            background: rgba(255, 215, 0, 0.1);
+            border-bottom: 2px solid var(--accent-gold);
+            border-radius: 1rem 1rem 0 0 !important;
+        }
+        
+        .admin-card .card-title {
+            color: var(--accent-gold);
+            font-weight: 700;
+        }
+        
+        .control-section {
+            background: rgba(255, 255, 255, 0.02);
+            border: 2px solid var(--border-secondary);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .control-section h4 {
+            color: var(--text-primary);
+            font-weight: 600;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid var(--border-secondary);
+            padding-bottom: 0.5rem;
+        }
+        
+        .btn-admin-primary {
+            background: var(--accent-gold);
+            border-color: var(--accent-gold);
+            color: var(--primary-black);
+            font-weight: 700;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-admin-primary:hover {
+            background: var(--accent-silver);
+            border-color: var(--accent-silver);
+            color: var(--primary-black);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+        }
+        
+        .btn-admin-secondary {
+            background: transparent;
+            border-color: var(--border-primary);
+            color: var(--text-primary);
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-admin-secondary:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-gold);
+            color: var(--accent-gold);
+        }
+        
+        .status-indicator {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .status-success {
+            background: var(--success-bg);
+            border: 2px solid var(--success-border);
+            color: var(--accent-green);
+        }
+        
+        .status-warning {
+            background: var(--warning-bg);
+            border: 2px solid var(--warning-border);
+            color: var(--accent-gold);
+        }
+        
+        .current-state {
+            background: rgba(0, 255, 136, 0.05);
+            border: 2px solid var(--accent-green);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .current-state h5 {
+            color: var(--accent-green);
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        
+        .current-state p {
+            color: var(--text-secondary);
+            margin-bottom: 0;
+        }
+        
+        .back-link {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 1000;
+        }
+        
+        @media (max-width: 768px) {
+            .admin-header {
+                padding: 1.5rem 0;
+            }
+            
+            .control-section {
+                padding: 1rem;
+            }
+            
+            .back-link {
+                position: static;
+                margin-bottom: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Skip link for accessibility -->
+    <a href="#main-content" class="skip-link">Saltar al contenido principal</a>
+    
+    <!-- Back to main app link -->
+    <div class="back-link">
+        <a href="/" class="btn btn-admin-secondary">
+            <i class="bi bi-arrow-left me-2" aria-hidden="true"></i>
+            Volver a la Aplicación
+        </a>
+    </div>
+    
+    <div class="container-fluid">
+        <!-- Admin Header -->
+        <header class="admin-header text-center">
+            <h1 class="display-5 fw-bold text-primary">
+                <i class="bi bi-gear-fill me-3" aria-hidden="true"></i>
+                Panel de Control Administrativo
+            </h1>
+            <p class="lead text-secondary">Rock and Roll Forum Jam en Español</p>
+            <p class="text-muted small">Control de Presentación en Vivo</p>
+        </header>
+        
+        <!-- Main content area -->
+        <main id="main-content" role="main">
+            <div class="row justify-content-center">
+                <div class="col-12 col-lg-10 col-xl-8">
+                    <!-- Instructions Card -->
+                    <div class="card admin-card mb-4">
+                        <div class="card-header">
+                            <h3 class="card-title mb-0">
+                                <i class="bi bi-info-circle-fill me-2" aria-hidden="true"></i>
+                                Instrucciones
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-0">
+                                Utiliza este panel para controlar qué canciones aparecen en la sección de 
+                                <strong>Presentación en Vivo</strong>. Los cambios se reflejarán inmediatamente 
+                                en la aplicación principal y se mantendrán entre sesiones.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Current State Display -->
+                    <div class="row mb-4">
+                        <div class="col-12 col-md-6">
+                            <div class="current-state">
+                                <h5>
+                                    <i class="bi bi-play-circle-fill me-2" aria-hidden="true"></i>
+                                    Canción Actual
+                                </h5>
+                                <p id="currentSongStatus">Cargando...</p>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="current-state">
+                                <h5>
+                                    <i class="bi bi-skip-forward-circle-fill me-2" aria-hidden="true"></i>
+                                    Próxima Canción
+                                </h5>
+                                <p id="nextSongStatus">Cargando...</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Control Sections -->
+                    <div class="row">
+                        <div class="col-12 col-lg-6 mb-4">
+                            <div class="control-section">
+                                <h4>
+                                    <i class="bi bi-play-circle me-2" aria-hidden="true"></i>
+                                    Establecer Canción Actual
+                                </h4>
+                                <div class="mb-3">
+                                    <label for="currentSongSelect" class="form-label">Seleccionar Canción:</label>
+                                    <select class="form-select" id="currentSongSelect">
+                                        <option value="">Cargando canciones...</option>
+                                    </select>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button type="button" class="btn btn-admin-primary" id="setCurrentSongBtn">
+                                        <i class="bi bi-check-circle me-2" aria-hidden="true"></i>
+                                        Establecer Actual
+                                    </button>
+                                    <button type="button" class="btn btn-admin-secondary" id="clearCurrentSongBtn">
+                                        <i class="bi bi-x-circle me-2" aria-hidden="true"></i>
+                                        Limpiar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-12 col-lg-6 mb-4">
+                            <div class="control-section">
+                                <h4>
+                                    <i class="bi bi-skip-forward-circle me-2" aria-hidden="true"></i>
+                                    Establecer Próxima Canción
+                                </h4>
+                                <div class="mb-3">
+                                    <label for="nextSongSelect" class="form-label">Seleccionar Canción:</label>
+                                    <select class="form-select" id="nextSongSelect">
+                                        <option value="">Cargando canciones...</option>
+                                    </select>
+                                </div>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button type="button" class="btn btn-admin-primary" id="setNextSongBtn">
+                                        <i class="bi bi-check-circle me-2" aria-hidden="true"></i>
+                                        Establecer Siguiente
+                                    </button>
+                                    <button type="button" class="btn btn-admin-secondary" id="clearNextSongBtn">
+                                        <i class="bi bi-x-circle me-2" aria-hidden="true"></i>
+                                        Limpiar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Status Messages -->
+                    <div id="statusMessages" class="mb-4">
+                        <!-- Status messages will be displayed here -->
+                    </div>
+                    
+                    <!-- Quick Actions -->
+                    <div class="card admin-card">
+                        <div class="card-header">
+                            <h3 class="card-title mb-0">
+                                <i class="bi bi-lightning-fill me-2" aria-hidden="true"></i>
+                                Acciones Rápidas
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-admin-secondary" id="refreshStateBtn">
+                                    <i class="bi bi-arrow-clockwise me-2" aria-hidden="true"></i>
+                                    Actualizar Estado
+                                </button>
+                                <button type="button" class="btn btn-admin-secondary" id="clearAllBtn">
+                                    <i class="bi bi-trash me-2" aria-hidden="true"></i>
+                                    Limpiar Todo
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Footer -->
+        <footer class="text-center py-3 mt-5">
+            <p class="text-muted small">
+                &copy; 2024 Rock and Roll Forum Jam en Español - Panel Administrativo
+            </p>
+            <p class="text-muted small">
+                Gestión profesional de presentaciones musicales en vivo
+            </p>
+        </footer>
+    </div>
+    
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Admin Control JS -->
+    <script>
+        // Pass translations to JavaScript
+        window.translations = {{ translations | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/admin_control.js') }}"></script>
+</body>
+</html>

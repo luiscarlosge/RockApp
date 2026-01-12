@@ -1,78 +1,97 @@
 {% extends "base.html" %}
 
-{% block title %}Musician Song Selector{% endblock %}
+{% block title %}{{ translations.app_title }}{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-12 col-lg-10">
-        <header class="text-center py-4">
-            <h1 class="display-4">Musician Song Selector</h1>
-            <p class="lead">Select a song to view musician assignments</p>
-        </header>
-        
-        <main>
-            <!-- Song Selection Dropdown -->
-            <div class="row mb-4">
-                <div class="col-12 col-md-8 col-lg-6 mx-auto">
-                    <label for="songSelect" class="form-label fs-5">Choose a Song:</label>
-                    <select class="form-select form-select-lg" id="songSelect" aria-describedby="songSelectHelp">
-                        <option value="">Select a song...</option>
-                    </select>
-                    <div id="songSelectHelp" class="form-text">Choose a song to see who's playing each instrument</div>
-                </div>
-            </div>
-            
-            <!-- Loading State -->
-            <div id="loadingState" class="text-center d-none" role="status" aria-live="polite">
-                <div class="spinner-border spinner-border-lg text-light" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <p class="mt-3 fs-5">Loading song details...</p>
-            </div>
-            
-            <!-- Error State -->
-            <div id="errorState" class="alert alert-danger d-none" role="alert" aria-live="assertive">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
+<!-- Song Selection Dropdown -->
+<div class="row mb-4">
+    <div class="col-12 col-md-8 col-lg-6 mx-auto">
+        <label for="songSelect" class="form-label fs-5">{{ translations.song_selection }}:</label>
+        <select class="form-select form-select-lg" 
+                id="songSelect" 
+                aria-describedby="songSelectHelp"
+                aria-required="false"
+                aria-invalid="false">
+            <option value="">{{ translations.select_song }}</option>
+        </select>
+        <div id="songSelectHelp" class="form-text">{{ translations.app_description }}</div>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div id="loadingState" 
+     class="text-center d-none" 
+     role="status" 
+     aria-live="polite"
+     aria-label="Cargando datos de canciones">
+    <div class="spinner-border spinner-border-lg" role="status">
+        <span class="visually-hidden">{{ translations.loading }}</span>
+    </div>
+    <p class="mt-3 fs-5">{{ translations.data_loading }}</p>
+</div>
+
+<!-- Error State -->
+<div id="errorState" 
+     class="alert alert-danger d-none" 
+     role="alert" 
+     aria-live="assertive"
+     aria-atomic="true">
+    <div class="d-flex align-items-center">
+        <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
+        <div>
+            <h4 class="alert-heading mb-1">{{ translations.error }}</h4>
+            <p id="errorMessage" class="mb-0">{{ translations.data_error }}</p>
+        </div>
+    </div>
+</div>
+
+<!-- Song Details Display -->
+<div id="songDetails" class="d-none" role="region" aria-labelledby="songTitle">
+    <div class="row">
+        <div class="col-12">
+            <div class="card song-card">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
                     <div>
-                        <h4 class="alert-heading mb-1">Unable to Load Song</h4>
-                        <p id="errorMessage" class="mb-0">Something went wrong. Please try selecting a different song or refresh the page.</p>
+                        <h3 id="songTitle" class="card-title mb-1"></h3>
+                        <p id="songArtist" class="text-muted mb-0"></p>
                     </div>
+                    <div class="badge fs-6" id="songDuration" aria-label="Duración de la canción"></div>
                 </div>
-            </div>
-            
-            <!-- Song Details Display -->
-            <div id="songDetails" class="d-none">
-                <div class="row">
-                    <div class="col-12">
-                        <div class="card song-card">
-                            <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
-                                <div>
-                                    <h3 id="songTitle" class="card-title mb-1"></h3>
-                                    <p id="songArtist" class="text-muted mb-0"></p>
-                                </div>
-                                <div class="badge bg-secondary fs-6" id="songDuration"></div>
-                            </div>
-                            <div class="card-body">
-                                <h4 class="mb-3">Musician Assignments</h4>
-                                <div id="musicianAssignments" class="row g-3">
-                                    <!-- Musician assignment cards will be populated here -->
-                                </div>
-                            </div>
+                <div class="card-body">
+                    <h4 class="mb-3">{{ translations.musician_assignments }}</h4>
+                    <div id="musicianAssignments" 
+                         class="row g-3" 
+                         role="list"
+                         aria-label="Lista de asignaciones de músicos">
+                        <!-- Musician assignment cards will be populated here -->
+                    </div>
+                    <!-- Cross-section navigation links -->
+                    <div class="mt-4 pt-3 border-top">
+                        <h5 class="mb-3">{{ translations.navigation_links }}</h5>
+                        <div id="crossSectionLinks" 
+                             class="d-flex flex-wrap gap-2"
+                             role="navigation"
+                             aria-label="Enlaces de navegación entre secciones">
+                            <!-- Navigation links will be populated here -->
                         </div>
                     </div>
                 </div>
             </div>
-            
-            <!-- Empty State -->
-            <div id="emptyState" class="text-center py-5">
-                <div class="mb-4">
-                    <i class="bi bi-music-note-list display-1 text-muted" aria-hidden="true"></i>
-                </div>
-                <h3 class="text-muted">Ready to Rock!</h3>
-                <p class="text-muted">Select a song from the dropdown above to see who's playing each instrument.</p>
-            </div>
-        </main>
+        </div>
     </div>
 </div>
+
+<!-- Empty State -->
+<div id="emptyState" class="text-center py-5" role="status">
+    <div class="mb-4">
+        <i class="bi bi-music-note-list display-1" aria-hidden="true"></i>
+    </div>
+    <h3>¡Listo para el Rock!</h3>
+    <p>{{ translations.app_description }}</p>
+</div>
+
+<!-- Pass translations to JavaScript -->
+<script>
+    window.translations = {{ translations | tojson }};
+</script>
 {% endblock %}
