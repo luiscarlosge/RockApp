@@ -485,10 +485,45 @@ class MusicianSongSelector {
             }
         });
         
+        // Enhanced keyboard shortcuts for order-based navigation
+        document.addEventListener('keydown', (e) => {
+            // Only handle shortcuts when not in input fields
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+                return;
+            }
+            
+            // Alt + Right Arrow: Go to next song
+            if (e.altKey && e.key === 'ArrowRight') {
+                e.preventDefault();
+                this.navigateToNextSong();
+            }
+            
+            // Alt + Left Arrow: Go to previous song
+            if (e.altKey && e.key === 'ArrowLeft') {
+                e.preventDefault();
+                this.navigateToPreviousSong();
+            }
+            
+            // Alt + N: Go to next song (alternative shortcut)
+            if (e.altKey && e.key === 'n') {
+                e.preventDefault();
+                this.navigateToNextSong();
+            }
+            
+            // Alt + P: Go to previous song (alternative shortcut)
+            if (e.altKey && e.key === 'p') {
+                e.preventDefault();
+                this.navigateToPreviousSong();
+            }
+        });
+        
         // Listen for data consistency changes
         window.addEventListener('dataConsistencyChange', () => {
             this.handleDataConsistencyChange();
         });
+        
+        // Listen for real-time song updates
+        this.setupRealTimeIntegration();
         
         // Check for pre-selected song from session storage
         const preselectedSong = sessionStorage.getItem('preselectedSong');
@@ -503,6 +538,130 @@ class MusicianSongSelector {
         
         // Show empty state initially
         this.showEmptyState();
+        
+        // Add keyboard shortcuts help
+        this.addKeyboardShortcutsHelp();
+    }
+    
+    /**
+     * Set up real-time integration for global song synchronization
+     * Requirements: 4.5, 6.1, 6.2
+     */
+    setupRealTimeIntegration() {
+        // Wait for connection manager to be available
+        if (window.connectionManager) {
+            const socket = window.connectionManager.getSocket();
+            if (socket) {
+                // Listen for global song changes
+                socket.on('song_changed', (data) => {
+                    this.handleRealTimeSongChange(data);
+                });
+                
+                // Listen for next song updates
+                socket.on('next_song_updated', (data) => {
+                    this.handleRealTimeNextSongUpdate(data);
+                });
+            }
+        }
+    }
+    
+    /**
+     * Handle real-time song changes from other sessions
+     * Requirements: 4.5, 6.2
+     */
+    handleRealTimeSongChange(data) {
+        if (!data || !data.song_id) return;
+        
+        // Only update if it's a different song
+        if (this.currentSongId !== data.song_id) {
+            // Update dropdown selection without triggering change event
+            if (this.songSelect) {
+                this.songSelect.value = data.song_id;
+            }
+            
+            // Load and display song details
+            if (data.song_data) {
+                this.displaySongDetails(data.song_data);
+                this.currentSongId = data.song_id;
+            } else {
+                this._loadSongDetails(data.song_id);
+            }
+            
+            // Show notification
+            this.showRealTimeUpdateNotification(data.song_data);
+        }
+    }
+    
+    /**
+     * Handle real-time next song updates with enhanced functionality
+     * Requirements: 4.5, 2.5
+     */
+    handleRealTimeNextSongUpdate(data) {
+        if (!data) return;
+        
+        // Update next song widget with new information
+        this.updateNextSongWidget({ next_song: data.next_song });
+        
+        // Show notification about next song update
+        if (data.next_song) {
+            const message = `${this.getTranslation('next_song_updated', 'Siguiente canción actualizada')}: ${data.next_song.title}`;
+            this.showTemporaryMessage(message, 'info');
+            
+            // Announce to screen readers
+            this.announceToScreenReader(message);
+        }
+    }
+    
+    /**
+     * Show notification for real-time updates
+     * Requirements: 6.2, 6.3
+     */
+    showRealTimeUpdateNotification(songData) {
+        if (!songData) return;
+        
+        const message = `Actualización automática: ${songData.artist} - ${songData.song}`;
+        this.showTemporaryMessage(message, 'info');
+        
+        // Announce to screen readers
+        this.announceToScreenReader(`Canción actualizada automáticamente: ${songData.artist} - ${songData.song}`);
+    }
+    
+    /**
+     * Show temporary message notification
+     * Requirements: 6.3
+     */
+    showTemporaryMessage(message, type = 'info') {
+        const alertClass = type === 'success' ? 'alert-success' : 
+                          type === 'warning' ? 'alert-warning' : 'alert-info';
+        const iconClass = type === 'success' ? 'bi-check-circle' : 
+                         type === 'warning' ? 'bi-exclamation-triangle' : 'bi-info-circle';
+        
+        const notification = document.createElement('div');
+        notification.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+        notification.style.cssText = `
+            top: 80px;
+            right: 20px;
+            z-index: 9999;
+            max-width: 350px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        `;
+        
+        notification.innerHTML = `
+            <div class="d-flex align-items-center">
+                <i class="${iconClass} me-2" aria-hidden="true"></i>
+                <div class="flex-grow-1">${message}</div>
+                <button type="button" class="btn-close" onclick="this.parentElement.parentElement.remove()" aria-label="Cerrar"></button>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-dismiss after 4 seconds
+        setTimeout(() => {
+            if (notification && notification.parentNode) {
+                notification.remove();
+            }
+        }, 4000);
     }
     
     handleDataConsistencyChange() {
@@ -565,13 +724,23 @@ class MusicianSongSelector {
         defaultOption.textContent = this.getTranslation('select_song', 'Seleccionar una canción...');
         fragment.appendChild(defaultOption);
         
-        // Songs are already sorted from the server, no need to sort again
+        // Songs are already sorted by order from the server, no need to sort again
         songs.forEach(song => {
             const option = document.createElement('option');
             option.value = song.song_id;
-            option.textContent = song.display_name;
+            
+            // Include order number in display name if available
+            let displayName = song.display_name;
+            if (song.order) {
+                displayName = `${song.order}. ${displayName}`;
+            }
+            option.textContent = displayName;
+            
             option.setAttribute('data-artist', song.artist);
             option.setAttribute('data-song', song.song);
+            if (song.order) {
+                option.setAttribute('data-order', song.order);
+            }
             fragment.appendChild(option);
         });
         
@@ -680,18 +849,192 @@ class MusicianSongSelector {
     
     updateSongInfo(songData) {
         /**
-         * Performance optimization: Update song info elements efficiently
+         * Performance optimization: Update song info elements efficiently with enhanced order support
+         * Requirements: 2.2, 5.1, 5.2
          */
         // Use textContent for better performance than innerHTML
         this.songTitle.textContent = songData.song;
-        this.songArtist.textContent = `by ${songData.artist}`;
+        this.songArtist.textContent = `${this.getTranslation('by_artist', 'por')} ${songData.artist}`;
         this.songDuration.textContent = songData.time;
+        
+        // Enhanced order display with Spanish formatting
+        const songOrderElement = document.getElementById('songOrder');
+        if (songOrderElement && songData.order) {
+            const orderText = `${this.getTranslation('order_label', 'Orden')}: ${songData.order}`;
+            songOrderElement.textContent = orderText;
+            songOrderElement.setAttribute('aria-label', `${this.getTranslation('song_order_aria', 'Orden de la canción')} ${songData.order}`);
+            songOrderElement.classList.remove('d-none');
+        } else if (songOrderElement) {
+            songOrderElement.classList.add('d-none');
+        }
+        
+        // Update next song widget with enhanced functionality
+        this.updateNextSongWidget(songData);
+        
+        // Update page title with order information for better navigation
+        if (songData.order) {
+            document.title = `${songData.order}. ${songData.artist} - ${songData.song} | Rock and Roll Forum Jam`;
+        } else {
+            document.title = `${songData.artist} - ${songData.song} | Rock and Roll Forum Jam`;
+        }
+    }
+    
+    updateNextSongWidget(songData) {
+        /**
+         * Update next song widget display with enhanced functionality
+         * Requirements: 2.2, 2.5, 5.1, 5.2
+         */
+        const nextSongWidget = document.getElementById('nextSongWidget');
+        const noNextSongWidget = document.getElementById('noNextSongWidget');
+        
+        if (songData.next_song) {
+            // Show next song widget
+            if (nextSongWidget) {
+                const nextSongTitle = document.getElementById('nextSongTitle');
+                const nextSongArtist = document.getElementById('nextSongArtist');
+                const nextSongOrder = document.getElementById('nextSongOrder');
+                const selectNextSongBtn = document.getElementById('selectNextSongBtn');
+                
+                // Update content with Spanish formatting
+                if (nextSongTitle) {
+                    nextSongTitle.textContent = songData.next_song.title || songData.next_song.song;
+                }
+                if (nextSongArtist) {
+                    const artist = songData.next_song.artist || this.getTranslation('unknown_artist', 'Artista desconocido');
+                    nextSongArtist.textContent = `${this.getTranslation('by_artist', 'por')} ${artist}`;
+                }
+                if (nextSongOrder) {
+                    nextSongOrder.textContent = `${this.getTranslation('order_label', 'Orden')}: ${songData.next_song.order}`;
+                    nextSongOrder.setAttribute('aria-label', `${this.getTranslation('order_label', 'Orden')} ${songData.next_song.order}`);
+                }
+                
+                // Enhanced next song selection button with keyboard support
+                if (selectNextSongBtn) {
+                    // Remove existing event listeners
+                    const newBtn = selectNextSongBtn.cloneNode(true);
+                    selectNextSongBtn.parentNode.replaceChild(newBtn, selectNextSongBtn);
+                    
+                    // Update button text and accessibility
+                    newBtn.innerHTML = `
+                        <i class="bi bi-arrow-right me-1" aria-hidden="true"></i>
+                        ${this.getTranslation('select_next_song', 'Seleccionar')}
+                    `;
+                    newBtn.setAttribute('aria-label', 
+                        `${this.getTranslation('select_next_song_aria', 'Seleccionar siguiente canción')}: ${songData.next_song.title}`
+                    );
+                    
+                    // Add click handler
+                    newBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        this.selectNextSong(songData.next_song);
+                    });
+                    
+                    // Add keyboard navigation support
+                    newBtn.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            this.selectNextSong(songData.next_song);
+                        }
+                    });
+                }
+                
+                // Add keyboard navigation for the entire widget
+                nextSongWidget.setAttribute('tabindex', '0');
+                nextSongWidget.setAttribute('role', 'button');
+                nextSongWidget.setAttribute('aria-label', 
+                    `${this.getTranslation('next_song', 'Siguiente canción')}: ${songData.next_song.title} ${this.getTranslation('by_artist', 'por')} ${songData.next_song.artist}`
+                );
+                
+                // Add keyboard handler for the widget
+                const widgetKeyHandler = (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        this.selectNextSong(songData.next_song);
+                    }
+                };
+                
+                // Remove existing handler and add new one
+                nextSongWidget.removeEventListener('keydown', widgetKeyHandler);
+                nextSongWidget.addEventListener('keydown', widgetKeyHandler);
+                
+                nextSongWidget.classList.remove('d-none');
+            }
+            
+            if (noNextSongWidget) {
+                noNextSongWidget.classList.add('d-none');
+            }
+        } else {
+            // Show no next song message with proper Spanish text
+            if (nextSongWidget) {
+                nextSongWidget.classList.add('d-none');
+            }
+            
+            if (noNextSongWidget) {
+                // Update the message content with Spanish translation
+                const messageElement = noNextSongWidget.querySelector('p');
+                if (messageElement) {
+                    messageElement.textContent = this.getTranslation('no_next_song', 'Última canción del repertorio');
+                }
+                noNextSongWidget.classList.remove('d-none');
+            }
+        }
+    }
+    
+    /**
+     * Select next song with enhanced functionality and notifications
+     * Requirements: 2.2, 2.5, 5.2
+     */
+    selectNextSong(nextSongData) {
+        if (!nextSongData || !nextSongData.song_id) {
+            console.warn('Invalid next song data provided');
+            return;
+        }
+        
+        // Update dropdown selection
+        if (this.songSelect) {
+            this.songSelect.value = nextSongData.song_id;
+        }
+        
+        // Load song details
+        this.handleSongSelection(nextSongData.song_id);
+        
+        // Show notification with Spanish text
+        const message = `${this.getTranslation('navigated_to_next_song', 'Navegando a la siguiente canción')}: ${nextSongData.title || nextSongData.song}`;
+        this.showTemporaryMessage(message, 'success');
+        
+        // Announce to screen readers
+        this.announceToScreenReader(message);
+        
+        // Emit real-time update if connected
+        if (window.connectionManager && window.connectionManager.isSocketConnected()) {
+            const socket = window.connectionManager.getSocket();
+            if (socket) {
+                socket.emit('select_global_song', {
+                    song_id: nextSongData.song_id,
+                    source: 'next_song_navigation',
+                    timestamp: Date.now()
+                });
+            }
+        }
+        
+        // Scroll to top of song details for better UX
+        const songDetails = document.getElementById('songDetails');
+        if (songDetails) {
+            songDetails.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     }
     
     updateMusicianAssignments(assignments) {
         /**
          * Performance optimization: Efficient DOM manipulation for assignments with Spanish translations and enhanced accessibility
          */
+        
+        if (!assignments) {
+            console.warn('No assignments provided to updateMusicianAssignments');
+            this.musicianAssignments.innerHTML = '<div class="col-12"><p class="text-warning">No hay datos de asignaciones disponibles</p></div>';
+            return;
+        }
+        
         // Define instruments in the specified order with Spanish translations
         const instruments = [
             { key: 'Lead Guitar', icon: 'bi-music-note-beamed', spanish: 'Guitarra Principal' },
@@ -882,6 +1225,161 @@ class MusicianSongSelector {
         this.songDetails.classList.add('d-none');
     }
     
+    /**
+     * Add keyboard shortcuts help display
+     * Requirements: 2.5, 5.2
+     */
+    addKeyboardShortcutsHelp() {
+        // Create keyboard shortcuts help element
+        const helpElement = document.createElement('div');
+        helpElement.id = 'keyboardShortcutsHelp';
+        helpElement.className = 'keyboard-shortcuts-help';
+        helpElement.innerHTML = `
+            <div class="card border-info">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0">
+                        <i class="bi bi-keyboard me-2" aria-hidden="true"></i>
+                        ${this.getTranslation('keyboard_shortcuts', 'Atajos de Teclado')}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-12 col-md-6">
+                            <small class="text-muted">
+                                <strong>Alt + →</strong> o <strong>Alt + N</strong><br>
+                                ${this.getTranslation('next_song_shortcut', 'Siguiente canción')}
+                            </small>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <small class="text-muted">
+                                <strong>Alt + ←</strong> o <strong>Alt + P</strong><br>
+                                ${this.getTranslation('previous_song_shortcut', 'Canción anterior')}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add CSS for the help element
+        const style = document.createElement('style');
+        style.textContent = `
+            .keyboard-shortcuts-help {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                max-width: 350px;
+                z-index: 1000;
+                opacity: 0.9;
+                transition: opacity 0.3s ease;
+            }
+            
+            .keyboard-shortcuts-help:hover {
+                opacity: 1;
+            }
+            
+            @media (max-width: 768px) {
+                .keyboard-shortcuts-help {
+                    bottom: 10px;
+                    right: 10px;
+                    left: 10px;
+                    max-width: none;
+                }
+            }
+        `;
+        
+        // Add style to head if not already added
+        if (!document.getElementById('keyboardShortcutsStyle')) {
+            style.id = 'keyboardShortcutsStyle';
+            document.head.appendChild(style);
+        }
+        
+        // Add help element to page
+        document.body.appendChild(helpElement);
+        
+        // Auto-hide after 10 seconds
+        setTimeout(() => {
+            if (helpElement && helpElement.parentNode) {
+                helpElement.style.opacity = '0.7';
+            }
+        }, 10000);
+        
+        // Hide on click
+        helpElement.addEventListener('click', () => {
+            helpElement.style.display = 'none';
+        });
+    }
+    
+    /**
+     * Navigate to next song in order sequence
+     * Requirements: 2.2, 2.5
+     */
+    navigateToNextSong() {
+        if (!this.currentSongId) {
+            this.showTemporaryMessage(this.getTranslation('no_song_selected', 'No hay canción seleccionada'), 'warning');
+            return;
+        }
+        
+        // Find current song in the songs array
+        const currentSong = this.songsById.get(this.currentSongId);
+        if (!currentSong || !currentSong.order) {
+            this.showTemporaryMessage(this.getTranslation('no_order_info', 'La canción actual no tiene información de orden'), 'warning');
+            return;
+        }
+        
+        // Find next song by order
+        const nextSong = this.songs.find(song => song.order && song.order > currentSong.order);
+        
+        if (nextSong) {
+            this.songSelect.value = nextSong.song_id;
+            this.handleSongSelection(nextSong.song_id);
+            
+            const message = `${this.getTranslation('navigated_to_next_song', 'Navegando a la siguiente canción')}: ${nextSong.display_name}`;
+            this.showTemporaryMessage(message, 'success');
+            this.announceToScreenReader(message);
+        } else {
+            const message = this.getTranslation('no_next_song', 'No hay siguiente canción en el repertorio');
+            this.showTemporaryMessage(message, 'info');
+            this.announceToScreenReader(message);
+        }
+    }
+    
+    /**
+     * Navigate to previous song in order sequence
+     * Requirements: 2.2, 2.5
+     */
+    navigateToPreviousSong() {
+        if (!this.currentSongId) {
+            this.showTemporaryMessage(this.getTranslation('no_song_selected', 'No hay canción seleccionada'), 'warning');
+            return;
+        }
+        
+        // Find current song in the songs array
+        const currentSong = this.songsById.get(this.currentSongId);
+        if (!currentSong || !currentSong.order) {
+            this.showTemporaryMessage(this.getTranslation('no_order_info', 'La canción actual no tiene información de orden'), 'warning');
+            return;
+        }
+        
+        // Find previous song by order (find the highest order that's less than current)
+        const previousSong = this.songs
+            .filter(song => song.order && song.order < currentSong.order)
+            .sort((a, b) => b.order - a.order)[0]; // Sort descending and take first
+        
+        if (previousSong) {
+            this.songSelect.value = previousSong.song_id;
+            this.handleSongSelection(previousSong.song_id);
+            
+            const message = `${this.getTranslation('navigated_to_previous_song', 'Navegando a la canción anterior')}: ${previousSong.display_name}`;
+            this.showTemporaryMessage(message, 'success');
+            this.announceToScreenReader(message);
+        } else {
+            const message = this.getTranslation('no_previous_song', 'No hay canción anterior en el repertorio');
+            this.showTemporaryMessage(message, 'info');
+            this.announceToScreenReader(message);
+        }
+    }
+    
     // Accessibility helper
     announceToScreenReader(message) {
         const announcement = document.createElement('div');
@@ -894,7 +1392,9 @@ class MusicianSongSelector {
         
         // Remove after announcement
         setTimeout(() => {
-            document.body.removeChild(announcement);
+            if (document.body.contains(announcement)) {
+                document.body.removeChild(announcement);
+            }
         }, 1000);
     }
     
@@ -987,6 +1487,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize musician selector (will be lazy-loaded when section is accessed)
     window.musicianSelector = new MusicianSelector();
     
+    // Initialize Socket.IO integration for real-time features
+    initializeSocketIOIntegration();
+    
     // Performance optimization: Preload popular songs after initial load
     setTimeout(() => {
         if (window.musicianSongSelector && window.musicianSongSelector.songs.length > 0) {
@@ -1003,6 +1506,381 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+/**
+ * Initialize Socket.IO integration for real-time features
+ * Requirements: 4.5, 6.1, 6.2, 6.3
+ */
+function initializeSocketIOIntegration() {
+    // Wait for connection manager to be available
+    if (window.connectionManager) {
+        setupGlobalSongSynchronization();
+        setupRealTimeEventHandlers();
+    } else {
+        // Wait for connection manager to initialize
+        setTimeout(() => {
+            initializeSocketIOIntegration();
+        }, 500);
+    }
+}
+
+/**
+ * Set up global song selection synchronization
+ * Requirements: 4.5, 6.2
+ */
+function setupGlobalSongSynchronization() {
+    if (!window.connectionManager) return;
+    
+    const socket = window.connectionManager.getSocket();
+    if (!socket) return;
+    
+    // Listen for global song changes
+    socket.on('song_changed', (data) => {
+        handleGlobalSongChange(data);
+    });
+    
+    // Listen for session synchronization events
+    socket.on('global_session_joined', (data) => {
+        handleGlobalSessionJoined(data);
+    });
+    
+    // Listen for connection status updates
+    window.connectionManager.on('connected', () => {
+        handleSocketConnected();
+    });
+    
+    window.connectionManager.on('disconnected', () => {
+        handleSocketDisconnected();
+    });
+    
+    window.connectionManager.on('reconnected', () => {
+        handleSocketReconnected();
+    });
+}
+
+/**
+ * Set up real-time event handlers for song selection
+ * Requirements: 4.5, 6.1, 6.2
+ */
+function setupRealTimeEventHandlers() {
+    if (!window.connectionManager) return;
+    
+    const socket = window.connectionManager.getSocket();
+    if (!socket) return;
+    
+    // Handle real-time song updates
+    socket.on('current_song_state', (data) => {
+        updateLocalSongState(data);
+    });
+    
+    // Handle session count updates
+    socket.on('session_count_updated', (data) => {
+        updateSessionCount(data.connected_sessions);
+    });
+    
+    // Handle next song updates
+    socket.on('next_song_updated', (data) => {
+        updateNextSongDisplay(data);
+    });
+}
+
+/**
+ * Handle global song change events
+ * Requirements: 4.5, 6.2
+ */
+function handleGlobalSongChange(data) {
+    console.info('Global song changed:', data);
+    
+    // Update song selector if available
+    if (window.musicianSongSelector && data.song_id) {
+        // Update dropdown selection without triggering change event
+        const songSelect = window.musicianSongSelector.songSelect;
+        if (songSelect && songSelect.value !== data.song_id) {
+            songSelect.value = data.song_id;
+            
+            // Load song details if not already loaded
+            if (window.musicianSongSelector.currentSongId !== data.song_id) {
+                window.musicianSongSelector._loadSongDetails(data.song_id);
+            }
+        }
+    }
+    
+    // Show notification to user
+    if (data.song_data) {
+        showGlobalSongChangeNotification(data.song_data);
+    }
+    
+    // Announce to screen readers
+    announceToScreenReader(`Canción global actualizada: ${data.song_data?.artist} - ${data.song_data?.song}`);
+}
+
+/**
+ * Handle global session joined events
+ * Requirements: 4.5, 6.1
+ */
+function handleGlobalSessionJoined(data) {
+    console.info('Joined global session:', data);
+    
+    // Update session count display if available
+    if (data.current_state?.connected_sessions) {
+        updateSessionCount(data.current_state.connected_sessions);
+    }
+    
+    // Update current song if available
+    if (data.current_song_details) {
+        handleGlobalSongChange({
+            song_id: data.current_song_details.song_id,
+            song_data: data.current_song_details
+        });
+    }
+}
+
+/**
+ * Handle socket connected events
+ * Requirements: 6.1, 6.3
+ */
+function handleSocketConnected() {
+    console.info('Socket.IO connected for real-time features');
+    
+    // Join global session automatically
+    const socket = window.connectionManager.getSocket();
+    if (socket) {
+        socket.emit('join_global_session', {
+            client_info: {
+                page: window.location.pathname,
+                userAgent: navigator.userAgent.substring(0, 100),
+                language: navigator.language
+            }
+        });
+    }
+    
+    // Show connection success notification
+    showConnectionNotification('Conectado al sistema en tiempo real', 'success');
+    
+    // Enable real-time features
+    enableRealTimeFeatures();
+}
+
+/**
+ * Handle socket disconnected events
+ * Requirements: 6.3
+ */
+function handleSocketDisconnected() {
+    console.warn('Socket.IO disconnected');
+    
+    // Show disconnection notification
+    showConnectionNotification('Desconectado del sistema en tiempo real', 'warning');
+    
+    // Disable real-time features
+    disableRealTimeFeatures();
+}
+
+/**
+ * Handle socket reconnected events
+ * Requirements: 6.3
+ */
+function handleSocketReconnected() {
+    console.info('Socket.IO reconnected');
+    
+    // Show reconnection success notification
+    showConnectionNotification('Reconectado al sistema en tiempo real', 'success');
+    
+    // Re-enable real-time features
+    enableRealTimeFeatures();
+    
+    // Rejoin global session
+    const socket = window.connectionManager.getSocket();
+    if (socket) {
+        socket.emit('join_global_session');
+    }
+}
+
+/**
+ * Update local song state from real-time updates
+ * Requirements: 4.5, 6.2
+ */
+function updateLocalSongState(data) {
+    if (!data) return;
+    
+    // Update current song display
+    if (data.current_song_data && window.musicianSongSelector) {
+        const songData = data.current_song_data;
+        
+        // Update song selector dropdown
+        if (window.musicianSongSelector.songSelect && songData.song_id) {
+            window.musicianSongSelector.songSelect.value = songData.song_id;
+        }
+        
+        // Update song details display
+        if (window.musicianSongSelector.currentSongId !== songData.song_id) {
+            window.musicianSongSelector.displaySongDetails(songData);
+        }
+    }
+    
+    // Update session count
+    if (typeof data.connected_sessions === 'number') {
+        updateSessionCount(data.connected_sessions);
+    }
+}
+
+/**
+ * Update session count display
+ * Requirements: 6.1, 6.2
+ */
+function updateSessionCount(count) {
+    // Update any session count displays on the page
+    const sessionCountElements = document.querySelectorAll('[data-session-count]');
+    sessionCountElements.forEach(element => {
+        element.textContent = count || 0;
+    });
+    
+    // Update global selector if available
+    if (window.globalSongSelector) {
+        window.globalSongSelector.updateSessionCount(count);
+    }
+}
+
+/**
+ * Update next song display from real-time updates
+ * Requirements: 4.5
+ */
+function updateNextSongDisplay(data) {
+    if (!data || !window.musicianSongSelector) return;
+    
+    // Update next song widget
+    const nextSongWidget = document.getElementById('nextSongWidget');
+    const noNextSongWidget = document.getElementById('noNextSongWidget');
+    
+    if (data.next_song) {
+        // Update next song information
+        const nextSongTitle = document.getElementById('nextSongTitle');
+        const nextSongArtist = document.getElementById('nextSongArtist');
+        const nextSongOrder = document.getElementById('nextSongOrder');
+        
+        if (nextSongTitle) nextSongTitle.textContent = data.next_song.title;
+        if (nextSongArtist) nextSongArtist.textContent = `por ${data.next_song.artist}`;
+        if (nextSongOrder) nextSongOrder.textContent = `Orden: ${data.next_song.order}`;
+        
+        if (nextSongWidget) nextSongWidget.classList.remove('d-none');
+        if (noNextSongWidget) noNextSongWidget.classList.add('d-none');
+    } else {
+        if (nextSongWidget) nextSongWidget.classList.add('d-none');
+        if (noNextSongWidget) noNextSongWidget.classList.remove('d-none');
+    }
+}
+
+/**
+ * Show global song change notification
+ * Requirements: 4.5, 6.2
+ */
+function showGlobalSongChangeNotification(songData) {
+    if (!songData) return;
+    
+    const message = `Canción global: ${songData.artist} - ${songData.song}`;
+    showTemporaryNotification(message, 'info', 'bi-broadcast');
+}
+
+/**
+ * Show connection status notification
+ * Requirements: 6.3
+ */
+function showConnectionNotification(message, type = 'info') {
+    const iconClass = type === 'success' ? 'bi-wifi' : 
+                     type === 'warning' ? 'bi-wifi-off' : 'bi-info-circle';
+    showTemporaryNotification(message, type, iconClass);
+}
+
+/**
+ * Show temporary notification
+ * Requirements: 6.3
+ */
+function showTemporaryNotification(message, type = 'info', iconClass = 'bi-info-circle') {
+    const alertClass = type === 'success' ? 'alert-success' : 
+                      type === 'warning' ? 'alert-warning' : 'alert-info';
+    
+    const notification = document.createElement('div');
+    notification.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = `
+        top: 80px;
+        right: 20px;
+        z-index: 9999;
+        max-width: 350px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    `;
+    
+    notification.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="${iconClass} me-2" aria-hidden="true"></i>
+            <div class="flex-grow-1">${message}</div>
+            <button type="button" class="btn-close" onclick="this.parentElement.parentElement.remove()" aria-label="Cerrar"></button>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-dismiss after 4 seconds
+    setTimeout(() => {
+        if (notification && notification.parentNode) {
+            notification.remove();
+        }
+    }, 4000);
+}
+
+/**
+ * Enable real-time features
+ * Requirements: 6.1, 6.2
+ */
+function enableRealTimeFeatures() {
+    // Add real-time indicators to UI
+    const realTimeIndicators = document.querySelectorAll('[data-realtime-indicator]');
+    realTimeIndicators.forEach(indicator => {
+        indicator.classList.add('realtime-active');
+        indicator.setAttribute('title', 'Sincronización en tiempo real activa');
+    });
+    
+    // Enable real-time song selection if on global selector page
+    if (window.globalSongSelector) {
+        window.globalSongSelector.isConnected = true;
+    }
+}
+
+/**
+ * Disable real-time features
+ * Requirements: 6.3
+ */
+function disableRealTimeFeatures() {
+    // Remove real-time indicators from UI
+    const realTimeIndicators = document.querySelectorAll('[data-realtime-indicator]');
+    realTimeIndicators.forEach(indicator => {
+        indicator.classList.remove('realtime-active');
+        indicator.setAttribute('title', 'Sincronización en tiempo real desactivada');
+    });
+    
+    // Disable real-time song selection if on global selector page
+    if (window.globalSongSelector) {
+        window.globalSongSelector.isConnected = false;
+    }
+}
+
+/**
+ * Announce message to screen readers
+ * Requirements: 6.3
+ */
+function announceToScreenReader(message) {
+    const announcement = document.createElement('div');
+    announcement.setAttribute('aria-live', 'polite');
+    announcement.setAttribute('aria-atomic', 'true');
+    announcement.className = 'sr-only';
+    announcement.textContent = message;
+    
+    document.body.appendChild(announcement);
+    
+    setTimeout(() => {
+        if (document.body.contains(announcement)) {
+            document.body.removeChild(announcement);
+        }
+    }, 1000);
+}
+
 // Add CSS class for screen reader only content
 const style = document.createElement('style');
 style.textContent = `
@@ -1018,7 +1896,6 @@ style.textContent = `
         border: 0 !important;
     }
 `;
-document.head.appendChild(style);
 
 class MusicianSelector {
     constructor() {
@@ -1289,6 +2166,7 @@ class MusicianSelector {
     updateMusicianSongs(songs) {
         /**
          * Performance optimization: Efficient DOM manipulation for songs with Spanish translations and enhanced accessibility
+         * Enhanced with better order display - Requirements: 2.2, 5.1, 5.2
          */
         // Performance optimization: Use document fragment for batch updates
         const fragment = document.createDocumentFragment();
@@ -1305,19 +2183,48 @@ class MusicianSelector {
             const songInstruments = col.querySelector('.song-instruments');
             const forwardLink = col.querySelector('.forward-link');
             
-            // Set content
-            songTitle.textContent = song.song;
-            songArtist.textContent = `por ${song.artist}`;
-            songDuration.textContent = `Duración: ${song.duration}`;
-            songInstruments.textContent = `Instrumentos: ${song.instruments.join(', ')}`;
+            // Enhanced content with order information and Spanish formatting
+            if (song.order) {
+                songTitle.innerHTML = `
+                    <span class="badge bg-warning text-dark me-2" aria-label="${this.getTranslation('order_label', 'Orden')} ${song.order}">
+                        ${song.order}
+                    </span>
+                    ${song.song}
+                `;
+            } else {
+                songTitle.textContent = song.song;
+            }
             
-            // Enhanced accessibility attributes
+            songArtist.textContent = `${this.getTranslation('by_artist', 'por')} ${song.artist}`;
+            songDuration.textContent = `${this.getTranslation('duration_label', 'Duración')}: ${song.duration}`;
+            
+            // Display instruments in Spanish with enhanced formatting
+            const instrumentsSpanish = song.instruments_spanish || song.instruments || [];
+            if (instrumentsSpanish.length > 0) {
+                songInstruments.innerHTML = `
+                    <strong>${this.getTranslation('instruments_label', 'Instrumentos')}:</strong> 
+                    ${instrumentsSpanish.join(', ')}
+                `;
+            } else {
+                songInstruments.textContent = `${this.getTranslation('instruments_label', 'Instrumentos')}: ${this.getTranslation('no_instruments', 'Ninguno')}`;
+            }
+            
+            // Enhanced accessibility attributes with order information
             card.setAttribute('role', 'listitem');
             card.setAttribute('tabindex', '0');
-            card.setAttribute('aria-label', `${song.song} por ${song.artist}, duración ${song.duration}`);
+            const orderInfo = song.order ? `, ${this.getTranslation('order_label', 'orden')} ${song.order}` : '';
+            card.setAttribute('aria-label', 
+                `${song.song} ${this.getTranslation('by_artist', 'por')} ${song.artist}${orderInfo}, ${this.getTranslation('duration_label', 'duración')} ${song.duration}`
+            );
             
-            // Set up forward link with enhanced accessibility
-            forwardLink.setAttribute('aria-label', `Ver ${song.song} en el selector de canciones`);
+            // Enhanced forward link with Spanish text and accessibility
+            forwardLink.innerHTML = `
+                <i class="bi bi-arrow-right-circle me-1" aria-hidden="true"></i>
+                ${this.getTranslation('view_in_song_selector', 'Ver en Selector de Canciones')}
+            `;
+            forwardLink.setAttribute('aria-label', 
+                `${this.getTranslation('view_song_in_selector', 'Ver')} ${song.song} ${this.getTranslation('in_song_selector', 'en el selector de canciones')}`
+            );
             forwardLink.setAttribute('role', 'button');
             forwardLink.setAttribute('tabindex', '0');
             
@@ -1342,6 +2249,17 @@ class MusicianSelector {
                 this.navigateToSongSelector(song.id);
             });
             
+            // Add hover effects for better UX
+            card.addEventListener('mouseenter', () => {
+                card.style.transform = 'translateY(-2px)';
+                card.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)';
+            });
+            
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = '';
+                card.style.boxShadow = '';
+            });
+            
             fragment.appendChild(col);
         });
         
@@ -1349,14 +2267,14 @@ class MusicianSelector {
         this.musicianSongs.innerHTML = '';
         this.musicianSongs.appendChild(fragment);
         
-        // If no songs, show a message with proper accessibility
+        // If no songs, show a message with proper accessibility and Spanish text
         if (songs.length === 0) {
             const message = document.createElement('div');
             message.className = 'col-12 text-center py-4';
             message.setAttribute('role', 'status');
             message.innerHTML = `
                 <i class="bi bi-music-note display-4 text-muted" aria-hidden="true"></i>
-                <p class="mt-3 text-muted">Este músico no tiene canciones asignadas</p>
+                <p class="mt-3 text-muted">${this.getTranslation('no_songs_assigned', 'Este músico no tiene canciones asignadas')}</p>
             `;
             this.musicianSongs.appendChild(message);
         }
@@ -1555,3 +2473,177 @@ class MusicianSelector {
     }
 }
 
+
+// Add Socket.IO integration styles
+const socketIOStyles = document.createElement('style');
+socketIOStyles.textContent = `
+/* Real-time connection indicators */
+.realtime-active {
+    position: relative;
+}
+
+.realtime-active::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background-color: #28a745;
+    border-radius: 50%;
+    border: 2px solid white;
+    animation: pulse-realtime 2s infinite;
+}
+
+@keyframes pulse-realtime {
+    0%, 100% { 
+        opacity: 1; 
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.7; 
+        transform: scale(1.2);
+    }
+}
+
+/* Connection status styles */
+.connection-status-container.connected {
+    border-color: #28a745;
+    background: rgba(40, 167, 69, 0.1);
+}
+
+.connection-status-container.disconnected {
+    border-color: #dc3545;
+    background: rgba(220, 53, 69, 0.1);
+}
+
+.connection-status-container.reconnecting {
+    border-color: #ffc107;
+    background: rgba(255, 193, 7, 0.1);
+}
+
+/* Global selector specific styles */
+.global-song-card {
+    transition: all 0.3s ease;
+}
+
+.global-song-card.updating {
+    opacity: 0.7;
+    transform: scale(0.98);
+}
+
+/* Notification styles */
+.notification-enter {
+    animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Socket.IO integration styles */
+.socket-connected .connection-indicator {
+    color: #28a745;
+}
+
+.socket-disconnected .connection-indicator {
+    color: #dc3545;
+}
+
+.socket-reconnecting .connection-indicator {
+    color: #ffc107;
+    animation: spin 1s linear infinite;
+}
+
+/* Manual reconnect button */
+.manual-reconnect-btn {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Session count badge */
+.session-count-badge {
+    transition: all 0.3s ease;
+}
+
+.session-count-badge.updated {
+    animation: bounce 0.6s ease-in-out;
+}
+
+@keyframes bounce {
+    0%, 20%, 60%, 100% {
+        transform: translateY(0);
+    }
+    40% {
+        transform: translateY(-10px);
+    }
+    80% {
+        transform: translateY(-5px);
+    }
+}
+
+/* Real-time sync indicator */
+.sync-indicator {
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.3s ease;
+}
+
+.sync-indicator.syncing {
+    color: #ffc107;
+}
+
+.sync-indicator.synced {
+    color: #28a745;
+}
+
+.sync-indicator.error {
+    color: #dc3545;
+}
+
+/* Loading states for real-time updates */
+.realtime-loading {
+    position: relative;
+    overflow: hidden;
+}
+
+.realtime-loading::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #007bff, transparent);
+    animation: loading-sweep 1.5s infinite;
+}
+
+@keyframes loading-sweep {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 576px) {
+    .connection-status-container {
+        font-size: 0.875rem;
+    }
+    
+    .realtime-active::after {
+        width: 6px;
+        height: 6px;
+    }
+}
+`;
+document.head.appendChild(socketIOStyles);

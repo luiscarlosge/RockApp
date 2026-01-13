@@ -44,7 +44,7 @@ class ErrorHandler {
     
     async retryWithBackoff(operation, operationName, maxRetries = this.maxRetries) {
         /**
-         * Execute an operation with exponential backoff retry logic.
+         * Execute an operation with exponential backoff retry logic and enhanced real-time support.
          * 
          * @param {Function} operation - The async operation to retry
          * @param {string} operationName - Name for logging and circuit breaker
@@ -60,12 +60,28 @@ class ErrorHandler {
         let lastError;
         let delay = this.retryDelay;
         
+        // Adjust retry parameters for real-time operations
+        const isRealTimeOperation = operationName.includes('realtime') || 
+                                   operationName.includes('websocket') || 
+                                   operationName.includes('global') ||
+                                   operationName.includes('session');
+        
+        if (isRealTimeOperation) {
+            maxRetries = Math.min(maxRetries, 5); // Limit retries for real-time ops
+            delay = Math.max(delay, 500); // Minimum delay for real-time ops
+        }
+        
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 const result = await operation();
                 
                 // Reset error count on success
                 this.errorCounts.set(operationName, 0);
+                
+                // Show success notification for recovered real-time operations
+                if (isRealTimeOperation && attempt > 1) {
+                    this.showRealTimeRecoveryNotification(operationName);
+                }
                 
                 return result;
                 
@@ -88,16 +104,141 @@ class ErrorHandler {
                     break;
                 }
                 
+                // Special handling for real-time errors
+                if (isRealTimeOperation) {
+                    this.handleRealTimeRetryError(error, operationName, attempt, maxRetries);
+                }
+                
                 // Wait before retrying (except on last attempt)
                 if (attempt < maxRetries) {
+                    // Show retry notification for real-time operations
+                    if (isRealTimeOperation) {
+                        this.showRealTimeRetryNotification(operationName, attempt, maxRetries, delay);
+                    }
+                    
                     await this.sleep(delay);
                     delay *= this.backoffFactor;
+                    
+                    // Cap delay for real-time operations
+                    if (isRealTimeOperation) {
+                        delay = Math.min(delay, 10000); // Max 10 seconds for real-time
+                    }
                 }
             }
         }
         
         console.error(`All ${maxRetries} attempts failed for ${operationName}:`, lastError);
+        
+        // Show failure notification for real-time operations
+        if (isRealTimeOperation) {
+            this.showRealTimeFailureNotification(operationName, lastError);
+        }
+        
         throw lastError;
+    }
+    
+    handleRealTimeRetryError(error, operationName, attempt, maxRetries) {
+        /**
+         * Handle real-time specific retry errors
+         */
+        // Classify error severity for real-time operations
+        let errorSeverity = 'medium';
+        
+        if (error.code) {
+            switch (error.code) {
+                case 4000: // Authentication
+                case 4001: // Authorization
+                    errorSeverity = 'critical'; // Don't retry auth errors
+                    break;
+                case 1012: // Service restart
+                case 1013: // Try again later
+                    errorSeverity = 'high'; // Longer delays
+                    break;
+                case 1006: // Network issues
+                    errorSeverity = 'medium'; // Normal retry
+                    break;
+                default:
+                    errorSeverity = 'low'; // Quick retry
+            }
+        }
+        
+        // Adjust retry behavior based on severity
+        if (errorSeverity === 'critical') {
+            throw error; // Don't retry critical errors
+        }
+        
+        // Log real-time specific error context
+        console.warn(`Real-time operation ${operationName} failed (attempt ${attempt}/${maxRetries}), severity: ${errorSeverity}`);
+    }
+    
+    showRealTimeRetryNotification(operationName, attempt, maxRetries, delay) {
+        /**
+         * Show retry notification for real-time operations
+         */
+        const message = this.getTranslation('network_retry_in_progress', 'Reintentando conexión de red') + 
+                       ` (${attempt}/${maxRetries}) - ${Math.round(delay/1000)}s`;
+        
+        // Only show notification for later attempts to avoid spam
+        if (attempt >= 2) {
+            this.showTemporaryNotification(message, 'info', 3000);
+        }
+    }
+    
+    showRealTimeRecoveryNotification(operationName) {
+        /**
+         * Show recovery notification for real-time operations
+         */
+        const message = this.getTranslation('realtime_update_successful_notification', 'Actualización en tiempo real exitosa');
+        this.showTemporaryNotification(message, 'success', 3000);
+    }
+    
+    showRealTimeFailureNotification(operationName, error) {
+        /**
+         * Show failure notification for real-time operations
+         */
+        const message = this.getTranslation('realtime_update_failed_notification', 'Error al actualizar en tiempo real. Reintentando...');
+        this.showTemporaryNotification(message, 'warning', 5000);
+    }
+    
+    showTemporaryNotification(message, type = 'info', duration = 4000) {
+        /**
+         * Show temporary notification to user
+         */
+        const alertClass = type === 'success' ? 'alert-success' : 
+                          type === 'warning' ? 'alert-warning' : 
+                          type === 'error' ? 'alert-danger' : 'alert-info';
+        const iconClass = type === 'success' ? 'bi-check-circle' : 
+                         type === 'warning' ? 'bi-exclamation-triangle' : 
+                         type === 'error' ? 'bi-x-circle' : 'bi-info-circle';
+        
+        const notification = document.createElement('div');
+        notification.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+        notification.style.cssText = `
+            top: 260px;
+            right: 20px;
+            z-index: 9993;
+            max-width: 350px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        `;
+        
+        notification.innerHTML = `
+            <div class="d-flex align-items-center">
+                <i class="${iconClass} me-2" aria-hidden="true"></i>
+                <div class="flex-grow-1">
+                    <small>${message}</small>
+                </div>
+                <button type="button" class="btn-close" onclick="this.parentElement.parentElement.remove()" aria-label="Cerrar"></button>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-dismiss after specified duration
+        setTimeout(() => {
+            if (notification && notification.parentNode) {
+                notification.remove();
+            }
+        }, duration);
     }
     
     isNonRetryableError(error) {
@@ -198,7 +339,7 @@ class ErrorHandler {
     
     async handleApiError(error, context = '') {
         /**
-         * Handle API errors with appropriate user messaging.
+         * Handle API errors with appropriate user messaging and enhanced real-time error support.
          * 
          * @param {Error} error - The error to handle
          * @param {string} context - Additional context for the error
@@ -213,6 +354,21 @@ class ErrorHandler {
         
         if (error.name === 'AbortError' || error.message.includes('timeout')) {
             return this.getTranslation('timeout_error', 'Tiempo de espera agotado');
+        }
+        
+        // WebSocket specific errors
+        if (error.type === 'websocket' || context.includes('websocket') || context.includes('socketio')) {
+            return this.handleWebSocketError(error, context);
+        }
+        
+        // Session synchronization errors
+        if (error.type === 'session_sync' || context.includes('session') || context.includes('sync')) {
+            return this.handleSessionSyncError(error, context);
+        }
+        
+        // Real-time specific errors
+        if (error.type === 'realtime' || context.includes('realtime') || context.includes('global')) {
+            return this.handleRealTimeError(error, context);
         }
         
         // HTTP status errors
@@ -245,6 +401,126 @@ class ErrorHandler {
         
         // Generic error
         return this.getTranslation('server_error', 'Error del servidor');
+    }
+    
+    handleWebSocketError(error, context) {
+        /**
+         * Handle WebSocket-specific errors with detailed classification
+         */
+        console.error('WebSocket error:', error, 'Context:', context);
+        
+        // Classify WebSocket error type
+        if (error.code) {
+            switch (error.code) {
+                case 1006: // Abnormal closure
+                    return this.getTranslation('websocket_network_error', 'Error de red WebSocket');
+                case 1011: // Server error
+                    return this.getTranslation('websocket_server_error', 'Error del servidor WebSocket');
+                case 1012: // Service restart
+                    return this.getTranslation('websocket_maintenance_mode', 'WebSocket en modo de mantenimiento');
+                case 1013: // Try again later
+                    return this.getTranslation('websocket_service_overloaded', 'Servicio WebSocket sobrecargado');
+                case 4000: // Custom authentication error
+                    return this.getTranslation('websocket_authentication_failed', 'Error de autenticación WebSocket');
+                case 4001: // Custom authorization error
+                    return this.getTranslation('websocket_authorization_failed', 'Error de autorización WebSocket');
+                case 4029: // Rate limit
+                    return this.getTranslation('websocket_rate_limit_exceeded', 'Límite de velocidad WebSocket excedido');
+                default:
+                    return this.getTranslation('websocket_protocol_error', 'Error de protocolo WebSocket');
+            }
+        }
+        
+        // Check error message for additional context
+        if (error.message) {
+            const message = error.message.toLowerCase();
+            if (message.includes('handshake')) {
+                return this.getTranslation('websocket_handshake_failed', 'Error en el protocolo de conexión WebSocket');
+            } else if (message.includes('security') || message.includes('ssl') || message.includes('tls')) {
+                return this.getTranslation('websocket_security_error', 'Error de seguridad WebSocket');
+            } else if (message.includes('quota') || message.includes('limit')) {
+                return this.getTranslation('websocket_quota_exceeded', 'Cuota WebSocket excedida');
+            } else if (message.includes('transport')) {
+                return this.getTranslation('websocket_transport_error', 'Error de transporte WebSocket');
+            }
+        }
+        
+        // Default WebSocket error
+        return this.getTranslation('websocket_connection_failed', 'Error de conexión WebSocket');
+    }
+    
+    handleSessionSyncError(error, context) {
+        /**
+         * Handle session synchronization errors
+         */
+        console.error('Session sync error:', error, 'Context:', context);
+        
+        // Classify session sync error type
+        if (error.type) {
+            switch (error.type) {
+                case 'conflict':
+                    return this.getTranslation('session_conflict_detected', 'Conflicto de sesión detectado');
+                case 'state_mismatch':
+                    return this.getTranslation('session_state_mismatch', 'Desajuste de estado de sesión');
+                case 'data_corrupted':
+                    return this.getTranslation('session_data_corrupted', 'Datos de sesión corruptos');
+                case 'timeout':
+                    return this.getTranslation('session_timeout_exceeded', 'Tiempo de sesión excedido');
+                case 'invalid_state':
+                    return this.getTranslation('session_invalid_state', 'Estado de sesión inválido');
+                case 'recovery_failed':
+                    return this.getTranslation('session_recovery_failed', 'Error en recuperación de sesión');
+                case 'cleanup_failed':
+                    return this.getTranslation('session_cleanup_failed', 'Error en limpieza de sesión');
+                case 'broadcast_failed':
+                    return this.getTranslation('session_broadcast_failed', 'Error en difusión de sesión');
+                case 'update_rejected':
+                    return this.getTranslation('session_update_rejected', 'Actualización de sesión rechazada');
+                case 'version_mismatch':
+                    return this.getTranslation('session_version_mismatch', 'Desajuste de versión de sesión');
+                case 'lock_timeout':
+                    return this.getTranslation('session_lock_timeout', 'Tiempo de bloqueo de sesión agotado');
+                case 'concurrent_modification':
+                    return this.getTranslation('session_concurrent_modification', 'Modificación concurrente de sesión');
+                case 'rollback_failed':
+                    return this.getTranslation('session_rollback_failed', 'Error en reversión de sesión');
+                case 'persistence_failed':
+                    return this.getTranslation('session_persistence_failed', 'Error en persistencia de sesión');
+                default:
+                    return this.getTranslation('session_sync_failed', 'Error de sincronización de sesión');
+            }
+        }
+        
+        // Default session sync error
+        return this.getTranslation('session_sync_failed', 'Error de sincronización de sesión');
+    }
+    
+    handleRealTimeError(error, context) {
+        /**
+         * Handle real-time specific errors
+         */
+        console.error('Real-time error:', error, 'Context:', context);
+        
+        // Check for specific real-time error patterns
+        if (error.message) {
+            const message = error.message.toLowerCase();
+            if (message.includes('global') && message.includes('state')) {
+                return this.getTranslation('global_state_error', 'Error de estado global');
+            } else if (message.includes('global') && message.includes('update')) {
+                return this.getTranslation('global_update_error', 'Error de actualización global');
+            } else if (message.includes('global') && message.includes('sync')) {
+                return this.getTranslation('global_sync_error', 'Error de sincronización global');
+            } else if (message.includes('global') && message.includes('session')) {
+                return this.getTranslation('global_session_error', 'Error de sesión global');
+            } else if (message.includes('global') && message.includes('broadcast')) {
+                return this.getTranslation('global_broadcast_error', 'Error de difusión global');
+            } else if (message.includes('global') && message.includes('connection')) {
+                return this.getTranslation('global_connection_error', 'Error de conexión global');
+            }
+        }
+        
+        // Default real-time error
+        return this.getTranslation('realtime_update_failed_notification', 'Error al actualizar en tiempo real. Reintentando...');
     }
     
     handleUnhandledError(error, type) {

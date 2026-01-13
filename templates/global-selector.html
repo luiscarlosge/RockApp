@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}{{ translations.global_selector_title }} - {{ translations.app_title }}{% endblock %}
+
+{% block head %}
+<!-- Socket.IO Client Library -->
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<!-- Global Song Selection Interface -->
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-10">
+        <!-- Page Header -->
+        <div class="text-center mb-4">
+            <h2 class="display-5 fw-bold">{{ translations.global_selector_title }}</h2>
+            <p class="lead">{{ translations.global_song_selection }}</p>
+        </div>
+
+        <!-- Connection Status Indicator -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card border-info">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div class="d-flex align-items-center">
+                                <div id="connectionIndicator" 
+                                     class="status-indicator me-3" 
+                                     aria-label="{{ translations.connection_status }}">
+                                    <div class="spinner-border spinner-border-sm text-warning" role="status">
+                                        <span class="visually-hidden">{{ translations.reconnecting }}</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h5 class="mb-1">{{ translations.connection_status }}</h5>
+                                    <p id="connectionStatus" class="mb-0 text-muted">{{ translations.reconnecting }}</p>
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <small class="text-muted">{{ translations.session_count }}:</small>
+                                <span id="sessionCount" class="badge bg-info ms-1">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Song Selection Dropdown -->
+        <div class="row mb-4">
+            <div class="col-12 col-md-8 col-lg-6 mx-auto">
+                <label for="globalSongSelect" class="form-label fs-5">
+                    {{ translations.select_global_song }}:
+                </label>
+                <select class="form-select form-select-lg" 
+                        id="globalSongSelect" 
+                        aria-describedby="globalSongSelectHelp"
+                        aria-required="false"
+                        aria-invalid="false">
+                    <option value="">{{ translations.select_song }}</option>
+                </select>
+                <div id="globalSongSelectHelp" class="form-text">
+                    {{ translations.global_song_selection }} - {{ translations.synchronized }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="globalLoadingState" 
+             class="text-center d-none" 
+             role="status" 
+             aria-live="polite"
+             aria-label="{{ translations.data_loading }}">
+            <div class="spinner-border spinner-border-lg" role="status">
+                <span class="visually-hidden">{{ translations.loading }}</span>
+            </div>
+            <p class="mt-3 fs-5">{{ translations.data_loading }}</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="globalErrorState" 
+             class="alert alert-danger d-none" 
+             role="alert" 
+             aria-live="assertive"
+             aria-atomic="true">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>
+                <div>
+                    <h4 class="alert-heading mb-1">{{ translations.error }}</h4>
+                    <p id="globalErrorMessage" class="mb-0">{{ translations.connection_error }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Global Song Display -->
+        <div id="globalSongDetails" class="d-none" role="region" aria-labelledby="globalSongTitle">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card global-song-card border-success">
+                        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center flex-wrap">
+                            <div>
+                                <h3 id="globalSongTitle" class="card-title mb-1">
+                                    <i class="bi bi-broadcast me-2" aria-hidden="true"></i>
+                                    {{ translations.current_selection }}
+                                </h3>
+                                <p id="globalSongArtist" class="mb-0 opacity-75"></p>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span id="globalSongOrder" class="badge bg-light text-dark" aria-label="{{ translations.order_label }}"></span>
+                                <span id="globalSongDuration" class="badge bg-light text-dark" aria-label="{{ translations.duration }}"></span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <!-- Musician Assignments -->
+                            <h4 class="mb-3">{{ translations.musician_assignments }}</h4>
+                            <div id="globalMusicianAssignments" 
+                                 class="row g-3 mb-4" 
+                                 role="list"
+                                 aria-label="{{ translations.musician_assignments }}">
+                                <!-- Global musician assignment cards will be populated here -->
+                            </div>
+
+                            <!-- Next Song Information -->
+                            <div id="nextSongSection" class="d-none">
+                                <div class="border-top pt-4">
+                                    <h5 class="mb-3">
+                                        <i class="bi bi-skip-forward me-2" aria-hidden="true"></i>
+                                        {{ translations.next_song }}
+                                    </h5>
+                                    <div class="card border-info">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div class="flex-grow-1">
+                                                    <h6 id="nextSongTitle" class="mb-1"></h6>
+                                                    <p id="nextSongArtist" class="text-muted mb-0"></p>
+                                                    <small class="text-muted">
+                                                        <i class="bi bi-clock me-1" aria-hidden="true"></i>
+                                                        <span id="nextSongDuration"></span>
+                                                    </small>
+                                                </div>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <span id="nextSongOrder" class="badge bg-info"></span>
+                                                    <button id="selectNextSongBtn" 
+                                                            class="btn btn-outline-info btn-sm"
+                                                            aria-label="{{ translations.select_global_song }}">
+                                                        <i class="bi bi-arrow-right me-1" aria-hidden="true"></i>
+                                                        {{ translations.select_song }}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Next Song Musicians Preview -->
+                                            <div id="nextSongMusicians" class="mt-3 pt-3 border-top">
+                                                <h6 class="mb-2 text-muted">{{ translations.musician_assignments }}:</h6>
+                                                <div id="nextSongMusiciansList" class="d-flex flex-wrap gap-1">
+                                                    <!-- Next song musicians will be populated here -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- No Next Song Message -->
+                            <div id="noNextSongSection" class="d-none">
+                                <div class="border-top pt-4">
+                                    <div class="text-center text-muted">
+                                        <i class="bi bi-check-circle display-6 mb-2" aria-hidden="true"></i>
+                                        <p class="mb-0">{{ translations.no_next_song }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="globalEmptyState" class="text-center py-5" role="status">
+            <div class="mb-4">
+                <i class="bi bi-broadcast display-1" aria-hidden="true"></i>
+            </div>
+            <h3>{{ translations.global_selector }}</h3>
+            <p>{{ translations.select_global_song }}</p>
+            <p class="text-muted">{{ translations.global_synchronization }}</p>
+        </div>
+
+        <!-- Synchronization Status -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card border-light">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-people me-2 text-info" aria-hidden="true"></i>
+                                <small class="text-muted">{{ translations.active_sessions }}:</small>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <span id="detailedSessionCount" class="badge bg-info me-2">0</span>
+                                <div id="syncStatus" class="sync-indicator">
+                                    <i class="bi bi-wifi text-success" aria-hidden="true"></i>
+                                    <small class="text-success ms-1">{{ translations.synchronized }}</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pass translations to JavaScript -->
+<script>
+    window.translations = {{ translations | tojson }};
+</script>
+{% endblock %}
+
+{% block scripts %}
+<!-- Global Selector JavaScript -->
+<script src="{{ url_for('static', filename='js/global-selector.js') }}"></script>
+{% endblock %}

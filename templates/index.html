@@ -6,7 +6,10 @@
 <!-- Song Selection Dropdown -->
 <div class="row mb-4">
     <div class="col-12 col-md-8 col-lg-6 mx-auto">
-        <label for="songSelect" class="form-label fs-5">{{ translations.song_selection }}:</label>
+        <label for="songSelect" class="form-label fs-5">
+            {{ translations.song_selection }}:
+            <span class="badge bg-info ms-2 session-count-badge" data-realtime-indicator data-session-count>0</span>
+        </label>
         <select class="form-select form-select-lg" 
                 id="songSelect" 
                 aria-describedby="songSelectHelp"
@@ -14,7 +17,10 @@
                 aria-invalid="false">
             <option value="">{{ translations.select_song }}</option>
         </select>
-        <div id="songSelectHelp" class="form-text">{{ translations.app_description }}</div>
+        <div id="songSelectHelp" class="form-text">
+            {{ translations.app_description }}
+            <span class="text-muted">• Sincronización en tiempo real</span>
+        </div>
     </div>
 </div>
 
@@ -55,7 +61,10 @@
                         <h3 id="songTitle" class="card-title mb-1">Información de la Canción</h3>
                         <p id="songArtist" class="text-muted mb-0"></p>
                     </div>
-                    <div class="badge fs-6" id="songDuration" aria-label="Duración de la canción"></div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span id="songOrder" class="badge bg-warning text-dark" aria-label="Orden de la canción"></span>
+                        <span id="songDuration" class="badge bg-secondary" aria-label="Duración de la canción"></span>
+                    </div>
                 </div>
                 <div class="card-body">
                     <h4 class="mb-3">{{ translations.musician_assignments }}</h4>
@@ -65,6 +74,42 @@
                          aria-label="Lista de asignaciones de músicos">
                         <!-- Musician assignment cards will be populated here -->
                     </div>
+                    
+                    <!-- Next Song Display Widget -->
+                    <div id="nextSongWidget" class="mt-4 pt-3 border-top d-none">
+                        <h5 class="mb-3">
+                            <i class="bi bi-skip-forward me-2" aria-hidden="true"></i>
+                            {{ translations.next_song }}
+                        </h5>
+                        <div class="card border-info">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 id="nextSongTitle" class="mb-1"></h6>
+                                        <p id="nextSongArtist" class="text-muted mb-0"></p>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span id="nextSongOrder" class="badge bg-info"></span>
+                                        <button id="selectNextSongBtn" 
+                                                class="btn btn-outline-info btn-sm"
+                                                aria-label="Seleccionar siguiente canción">
+                                            <i class="bi bi-arrow-right me-1" aria-hidden="true"></i>
+                                            Seleccionar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- No Next Song Message -->
+                    <div id="noNextSongWidget" class="mt-4 pt-3 border-top d-none">
+                        <div class="text-center text-muted">
+                            <i class="bi bi-check-circle display-6 mb-2" aria-hidden="true"></i>
+                            <p class="mb-0">{{ translations.no_next_song }}</p>
+                        </div>
+                    </div>
+                    
                     <!-- Cross-section navigation links -->
                     <div class="mt-4 pt-3 border-top">
                         <h5 class="mb-3">{{ translations.navigation_links }}</h5>

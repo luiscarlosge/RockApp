@@ -613,11 +613,67 @@
 /* Enhanced body styling with black theme */
 body {
     background: linear-gradient(135deg, var(--primary-black) 0%, var(--secondary-black) 50%, var(--dark-gray) 100%);
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
     min-height: 100vh;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     line-height: 1.6;
     padding-top: 0; /* Remove default padding since we have fixed menu */
+}
+
+/* Force white text on all text elements to ensure visibility */
+body * {
+    color: var(--text-primary) !important;
+}
+
+/* Override for specific elements that should have different colors */
+.badge,
+.btn-primary,
+.btn-warning,
+.btn-success,
+.btn-danger,
+.btn-info,
+.song-info .song-duration,
+.forward-link,
+.btn-outline-warning:hover,
+.btn-outline-warning:focus,
+.btn-outline-warning:active,
+.skip-link {
+    color: var(--primary-black) !important;
+}
+
+/* Ensure form elements have proper text color */
+.form-select,
+.form-control,
+input,
+textarea,
+select {
+    color: var(--text-primary) !important;
+    background-color: var(--bg-input) !important;
+}
+
+/* Ensure all card text is white */
+.card,
+.card *,
+.instrument-card,
+.instrument-card *,
+.song-card-small,
+.song-card-small * {
+    color: var(--text-primary) !important;
+}
+
+/* Ensure musician names and instrument names are clearly visible */
+.musician-name,
+.instrument-name,
+.assignment-text,
+.instrument-text {
+    color: var(--text-primary) !important;
+    font-weight: 700 !important;
+}
+
+/* Ensure unassigned text is visible but muted */
+.unassigned-text {
+    color: var(--text-muted) !important;
+    font-style: italic !important;
 }
 
 /* Adjust container for menu system */

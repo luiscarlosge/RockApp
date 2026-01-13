@@ -62,6 +62,14 @@ class Song:
     song_id: str  # Generated unique identifier
 
 
+@dataclass
+class OrderedSong(Song):
+    """Data class representing a song with order information and musician assignments."""
+    order: int
+    next_song_id: Optional[str] = None
+    previous_song_id: Optional[str] = None
+
+
 class CSVDataProcessor:
     """
     Processes CSV data containing song assignments and musician information.
@@ -79,8 +87,9 @@ class CSVDataProcessor:
             csv_file_path: Path to the CSV file containing song data
         """
         self.csv_file_path = csv_file_path
-        self._songs_cache: List[Song] = []
-        self._songs_by_id: Dict[str, Song] = {}
+        self._songs_cache: List[OrderedSong] = []
+        self._songs_by_id: Dict[str, OrderedSong] = {}
+        self._songs_by_order: Dict[int, OrderedSong] = {}
         self._dropdown_cache: List[Dict] = []
         self._data_loaded = False
         self._last_modified_time = None
@@ -93,26 +102,26 @@ class CSVDataProcessor:
         # Set up logging
         self.logger = logging.getLogger(__name__)
     
-    def _calculate_data_hash(self, data: List[Song]) -> str:
+    def _calculate_data_hash(self, data: List[OrderedSong]) -> str:
         """
         Calculate a hash of the data for integrity checking.
         
         Args:
-            data: List of Song objects
+            data: List of OrderedSong objects
             
         Returns:
             Hash string representing the data
         """
         import hashlib
-        data_str = str(sorted([(s.song_id, s.artist, s.song) for s in data]))
+        data_str = str(sorted([(s.song_id, s.artist, s.song, s.order) for s in data]))
         return hashlib.md5(data_str.encode()).hexdigest()
     
-    def _validate_data_integrity(self, data: List[Song]) -> Tuple[bool, List[str]]:
+    def _validate_data_integrity(self, data: List[OrderedSong]) -> Tuple[bool, List[str]]:
         """
         Validate data integrity and consistency.
         
         Args:
-            data: List of Song objects to validate
+            data: List of OrderedSong objects to validate
             
         Returns:
             Tuple of (is_valid, list_of_issues)
@@ -125,12 +134,20 @@ class CSVDataProcessor:
             duplicates = [sid for sid in set(song_ids) if song_ids.count(sid) > 1]
             issues.append(f"Duplicate song IDs found: {duplicates}")
         
+        # Check for duplicate order values
+        orders = [song.order for song in data if song.order is not None]
+        if len(orders) != len(set(orders)):
+            duplicates = [order for order in set(orders) if orders.count(order) > 1]
+            issues.append(f"Duplicate order values found: {duplicates}")
+        
         # Check for empty required fields
         for song in data:
             if not song.artist or not song.song:
                 issues.append(f"Missing artist or song title for ID: {song.song_id}")
             if not song.time:
                 issues.append(f"Missing duration for song: {song.song_id}")
+            if song.order is None or song.order < 0:
+                issues.append(f"Invalid order value for song: {song.song_id}")
         
         # Check for data consistency across musicians
         all_musicians = set()
@@ -183,15 +200,15 @@ class CSVDataProcessor:
         similarity = len(common_chars) / len(total_chars)
         return similarity > threshold and abs(len(n1) - len(n2)) <= 1
     
-    def _create_fallback_data(self) -> List[Song]:
+    def _create_fallback_data(self) -> List[OrderedSong]:
         """
         Create minimal fallback data in case of complete data failure.
         
         Returns:
-            List of minimal Song objects for fallback
+            List of minimal OrderedSong objects for fallback
         """
         return [
-            Song(
+            OrderedSong(
                 artist="Sistema",
                 song="Datos no disponibles",
                 lead_guitar=None,
@@ -201,7 +218,8 @@ class CSVDataProcessor:
                 singer=None,
                 keyboards=None,
                 time="0:00",
-                song_id="fallback-no-data"
+                song_id="fallback-no-data",
+                order=1
             )
         ]
     
@@ -317,14 +335,38 @@ class CSVDataProcessor:
             return None
         return str(assignment).strip()
     
+    def _parse_order_value(self, order_value: str, default_order: int) -> int:
+        """
+        Parse and validate order value from CSV.
+        
+        Args:
+            order_value: Raw order value from CSV
+            default_order: Default order to use if parsing fails
+            
+        Returns:
+            Valid integer order value
+        """
+        if order_value is None or str(order_value).strip() == "":
+            return default_order
+        
+        try:
+            parsed_order = int(float(str(order_value).strip()))
+            if parsed_order <= 0:
+                self.logger.warning(f"Invalid order value {parsed_order}, using default {default_order}")
+                return default_order
+            return parsed_order
+        except (ValueError, TypeError):
+            self.logger.warning(f"Could not parse order value '{order_value}', using default {default_order}")
+            return default_order
+    
     @retry_on_failure(max_attempts=3, delay=0.5)
-    def load_songs(self) -> List[Song]:
+    def load_songs(self) -> List[OrderedSong]:
         """
         Load and parse songs from the CSV file with intelligent caching,
         comprehensive error handling, and data integrity validation.
         
         Returns:
-            List of Song objects loaded from the CSV file
+            List of OrderedSong objects loaded from the CSV file
             
         Raises:
             FileNotFoundError: If the CSV file cannot be found
@@ -339,6 +381,7 @@ class CSVDataProcessor:
             # Clear existing cache
             self._songs_cache.clear()
             self._songs_by_id.clear()
+            self._songs_by_order.clear()
             self._dropdown_cache.clear()
             
             # Load CSV data using built-in csv module with enhanced error handling
@@ -355,15 +398,26 @@ class CSVDataProcessor:
                 if not rows:
                     raise ValueError(f"CSV file is empty: {self.csv_file_path}")
                 
-                # Validate required columns
+                # Validate required columns - handle both "Battery" and "Drums" column names
                 required_columns = ['Artist', 'Song', 'Lead Guitar', 'Rythm Guitar', 
-                                  'Bass', 'Battery', 'Singer', 'Keyboards', 'Time']
+                                  'Bass', 'Lead Singer', 'Keyboards', 'Time']
+                # Check for either "Battery" or "Drums" column
+                drums_column = None
+                if 'Battery' in reader.fieldnames:
+                    drums_column = 'Battery'
+                elif 'Drums' in reader.fieldnames:
+                    drums_column = 'Drums'
+                else:
+                    required_columns.append('Battery')  # Will be reported as missing
+                
                 missing_columns = [col for col in required_columns if col not in reader.fieldnames]
                 if missing_columns:
                     raise ValueError(f"Missing required columns: {missing_columns}")
                 
                 # Process each row in the CSV with validation
                 processed_songs = []
+                max_order = 0
+                
                 for row_num, row in enumerate(rows, start=2):  # Start at 2 for header
                     try:
                         # Validate required fields
@@ -374,18 +428,23 @@ class CSVDataProcessor:
                         # Generate unique song ID
                         song_id = self._generate_song_id(row['Artist'], row['Song'])
                         
-                        # Create Song object with cleaned assignments
-                        song = Song(
+                        # Parse order value with default assignment
+                        order_value = self._parse_order_value(row.get('Order'), max_order + 1)
+                        max_order = max(max_order, order_value)
+                        
+                        # Create OrderedSong object with cleaned assignments
+                        song = OrderedSong(
                             artist=str(row['Artist']).strip(),
                             song=str(row['Song']).strip(),
                             lead_guitar=self._clean_assignment(row['Lead Guitar']),
                             rhythm_guitar=self._clean_assignment(row['Rythm Guitar']),  # Note: CSV has typo "Rythm"
                             bass=self._clean_assignment(row['Bass']),
-                            battery=self._clean_assignment(row['Battery']),
-                            singer=self._clean_assignment(row['Singer']),
+                            battery=self._clean_assignment(row[drums_column]) if drums_column else None,
+                            singer=self._clean_assignment(row['Lead Singer']),
                             keyboards=self._clean_assignment(row['Keyboards']),
                             time=str(row['Time']).strip() if row.get('Time') else "0:00",
-                            song_id=song_id
+                            song_id=song_id,
+                            order=order_value
                         )
                         
                         processed_songs.append(song)
@@ -397,6 +456,9 @@ class CSVDataProcessor:
                 if not processed_songs:
                     raise ValueError("No valid songs could be processed from CSV file")
                 
+                # Sort songs by order
+                processed_songs.sort(key=lambda s: s.order)
+                
                 # Validate data integrity
                 is_valid, issues = self._validate_data_integrity(processed_songs)
                 if not is_valid:
@@ -407,6 +469,10 @@ class CSVDataProcessor:
                 self._songs_cache = processed_songs
                 for song in processed_songs:
                     self._songs_by_id[song.song_id] = song
+                    self._songs_by_order[song.order] = song
+                
+                # Build song relationships (next/previous)
+                self._build_song_relationships()
                 
                 # Calculate data integrity hash
                 self._data_integrity_hash = self._calculate_data_hash(processed_songs)
@@ -448,20 +514,21 @@ class CSVDataProcessor:
             raise Exception(f"Unexpected error loading CSV data: {str(e)}")
     
     def _populate_dropdown_cache(self):
-        """Pre-populate the dropdown cache for faster access."""
+        """Pre-populate the dropdown cache for faster access, sorted by order."""
         self._dropdown_cache.clear()
         for song in self._songs_cache:
             self._dropdown_cache.append({
                 "song_id": song.song_id,
                 "display_name": f"{song.artist} - {song.song}",
                 "artist": song.artist,
-                "song": song.song
+                "song": song.song,
+                "order": song.order
             })
         
-        # Sort by artist, then by song title
-        self._dropdown_cache.sort(key=lambda x: (x["artist"], x["song"]))
+        # Sort by order first, then by artist and song title as fallback
+        self._dropdown_cache.sort(key=lambda x: (x["order"], x["artist"], x["song"]))
     
-    def get_song_by_id(self, song_id: str) -> Optional[Song]:
+    def get_song_by_id(self, song_id: str) -> Optional[OrderedSong]:
         """
         Retrieve a specific song by its unique ID.
         
@@ -469,31 +536,177 @@ class CSVDataProcessor:
             song_id: The unique identifier for the song
             
         Returns:
-            Song object if found, None otherwise
+            OrderedSong object if found, None otherwise
         """
         if not self._data_loaded:
             self.load_songs()
         
         return self._songs_by_id.get(song_id)
     
-    def get_all_songs(self) -> List[Song]:
+    def get_all_songs(self) -> List[OrderedSong]:
         """
-        Get all loaded songs.
+        Get all loaded songs sorted by order.
         
         Returns:
-            List of all Song objects
+            List of all OrderedSong objects sorted by order
         """
         if not self._data_loaded:
             self.load_songs()
         
         return self._songs_cache.copy()
     
-    def format_song_display(self, song_data: Song) -> Dict:
+    def get_song_by_order(self, order: int) -> Optional[OrderedSong]:
+        """
+        Retrieve a specific song by its order number.
+        
+        Args:
+            order: The order number of the song
+            
+        Returns:
+            OrderedSong object if found, None otherwise
+        """
+        if not self._data_loaded:
+            self.load_songs()
+        
+        return self._songs_by_order.get(order)
+    
+    def get_songs_sorted_by_order(self) -> List[OrderedSong]:
+        """
+        Get all songs sorted by order field.
+        
+        Returns:
+            List of OrderedSong objects sorted by order
+        """
+        if not self._data_loaded:
+            self.load_songs()
+        
+        return sorted(self._songs_cache, key=lambda s: s.order)
+    
+    def get_musician_songs_by_order(self, musician: str) -> List[Dict]:
+        """
+        Get all songs for a musician sorted by order.
+        
+        Args:
+            musician: The musician name
+            
+        Returns:
+            List of song dictionaries sorted by order
+        """
+        return self.get_musician_songs(musician)  # Already sorts by order
+    
+    def get_next_song(self, current_song_id: str) -> Optional[OrderedSong]:
+        """
+        Get the next song in the performance order.
+        
+        Args:
+            current_song_id: The ID of the current song
+            
+        Returns:
+            OrderedSong object of the next song, or None if current song is last
+        """
+        if not self._data_loaded:
+            self.load_songs()
+        
+        current_song = self._songs_by_id.get(current_song_id)
+        if not current_song:
+            return None
+        
+        # Find the next song by order
+        sorted_songs = sorted(self._songs_cache, key=lambda s: s.order)
+        
+        for i, song in enumerate(sorted_songs):
+            if song.song_id == current_song_id:
+                # Return next song if it exists
+                if i + 1 < len(sorted_songs):
+                    return sorted_songs[i + 1]
+                break
+        
+        return None
+    
+    def get_previous_song(self, current_song_id: str) -> Optional[OrderedSong]:
+        """
+        Get the previous song in the performance order.
+        
+        Args:
+            current_song_id: The ID of the current song
+            
+        Returns:
+            OrderedSong object of the previous song, or None if current song is first
+        """
+        if not self._data_loaded:
+            self.load_songs()
+        
+        current_song = self._songs_by_id.get(current_song_id)
+        if not current_song:
+            return None
+        
+        # Find the previous song by order
+        sorted_songs = sorted(self._songs_cache, key=lambda s: s.order)
+        
+        for i, song in enumerate(sorted_songs):
+            if song.song_id == current_song_id:
+                # Return previous song if it exists
+                if i > 0:
+                    return sorted_songs[i - 1]
+                break
+        
+        return None
+    
+    def _build_song_relationships(self):
+        """
+        Build next/previous song relationship mapping for all songs.
+        This method updates the next_song_id and previous_song_id fields.
+        """
+        # Don't call load_songs here to avoid recursion
+        if not self._songs_cache:
+            return
+        
+        # Sort songs by order
+        sorted_songs = sorted(self._songs_cache, key=lambda s: s.order)
+        
+        # Update relationships
+        for i, song in enumerate(sorted_songs):
+            # Set next song ID
+            if i + 1 < len(sorted_songs):
+                song.next_song_id = sorted_songs[i + 1].song_id
+            else:
+                song.next_song_id = None
+            
+            # Set previous song ID
+            if i > 0:
+                song.previous_song_id = sorted_songs[i - 1].song_id
+            else:
+                song.previous_song_id = None
+    
+    def get_next_song_info(self, current_song_id: str) -> Optional[Dict]:
+        """
+        Get formatted information about the next song.
+        
+        Args:
+            current_song_id: The ID of the current song
+            
+        Returns:
+            Dictionary with next song information, or None if no next song
+        """
+        next_song = self.get_next_song(current_song_id)
+        if not next_song:
+            return None
+        
+        return {
+            "song_id": next_song.song_id,
+            "title": f"{next_song.artist} - {next_song.song}",
+            "artist": next_song.artist,
+            "song": next_song.song,
+            "order": next_song.order,
+            "time": next_song.time
+        }
+    
+    def format_song_display(self, song_data: OrderedSong) -> Dict:
         """
         Format song data for frontend display.
         
         Args:
-            song_data: Song object to format
+            song_data: OrderedSong object to format
             
         Returns:
             Dictionary formatted for JSON response
@@ -503,6 +716,7 @@ class CSVDataProcessor:
             "artist": song_data.artist,
             "song": song_data.song,
             "time": song_data.time,
+            "order": song_data.order,
             "assignments": {
                 "Lead Guitar": song_data.lead_guitar,
                 "Rhythm Guitar": song_data.rhythm_guitar,
@@ -559,7 +773,7 @@ class CSVDataProcessor:
     
     def get_musician_songs(self, musician_name: str) -> List[Dict]:
         """
-        Return all songs for a specific musician with instruments.
+        Return all songs for a specific musician with instruments, sorted by order.
         
         Args:
             musician_name: The name of the musician
@@ -597,11 +811,12 @@ class CSVDataProcessor:
                     "artist": song.artist,
                     "song": song.song,
                     "duration": song.time,
+                    "order": song.order,
                     "instruments": instruments
                 })
         
-        # Sort by artist, then by song title
-        musician_songs.sort(key=lambda x: (x["artist"], x["song"]))
+        # Sort by order first, then by artist and song title as fallback
+        musician_songs.sort(key=lambda x: (x["order"], x["artist"], x["song"]))
         return musician_songs
     
     def get_musician_by_id(self, musician_id: str) -> Optional[Dict]:
