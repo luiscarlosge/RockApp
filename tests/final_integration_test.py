@@ -8,6 +8,11 @@ import sys
 import requests
 import time
 import json
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from app import app
 
 def test_application_startup():
