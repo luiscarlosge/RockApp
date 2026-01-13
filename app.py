@@ -10,7 +10,6 @@ import time
 from functools import wraps
 from csv_data_processor import CSVDataProcessor
 from spanish_translations import SPANISH_TRANSLATIONS, get_translation, get_error_message, get_retry_message, get_recovery_message, translate_instrument_name
-from live_performance_manager import LivePerformanceManager
 
 # Create Flask application instance
 app = Flask(__name__)
@@ -19,7 +18,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Session configuration for live performance persistence
+# Session configuration
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400 * 7  # 7 days in seconds
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('WEBSITE_SITE_NAME') is not None  # Secure cookies in production
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -146,13 +145,11 @@ def handle_api_error(error, operation_name):
 # Initialize CSV data processor with error handling for Azure
 try:
     data_processor = CSVDataProcessor()
-    live_performance_manager = LivePerformanceManager(data_processor)
-    app.logger.info("CSV data processor and live performance manager initialized successfully")
+    app.logger.info("CSV data processor initialized successfully")
 except Exception as e:
-    app.logger.error(f"Failed to initialize data processor or live performance manager: {str(e)}")
-    # Create dummy processors to prevent app crash
+    app.logger.error(f"Failed to initialize data processor: {str(e)}")
+    # Create dummy processor to prevent app crash
     data_processor = None
-    live_performance_manager = None
 
 # Performance optimization: Simple in-memory cache
 _response_cache = {}
@@ -356,39 +353,6 @@ def get_musician_details(musician_id):
     except Exception as e:
         return handle_api_error(e, "get_musician_details")
 
-@app.route('/api/live-performance')
-@cache_response(timeout=60)  # Cache for 1 minute (shorter due to real-time nature)
-@circuit_breaker('live_performance_api')
-@retry_on_failure(max_attempts=2)
-def get_live_performance():
-    """Return current live performance state with comprehensive error handling."""
-    try:
-        if live_performance_manager is None:
-            app.logger.error("Live performance manager not initialized")
-            return jsonify({"error": get_error_message("not_initialized")}), 500
-        
-        # Validate and clean up state before returning
-        validation_result = live_performance_manager.validate_state()
-        if validation_result["state_cleaned"]:
-            app.logger.info("Cleaned up invalid live performance state")
-        
-        performance_state = live_performance_manager.get_performance_state()
-        
-        # Validate response data
-        if not isinstance(performance_state, dict):
-            raise ValueError("Invalid performance state returned from manager")
-        
-        response = jsonify(performance_state)
-        
-        # Performance optimization: Add cache headers (shorter cache for real-time data)
-        response.headers['Cache-Control'] = 'public, max-age=60'  # 1 minute
-        response.headers['ETag'] = f'live-performance-{hash(str(performance_state))}'
-        
-        return response
-        
-    except Exception as e:
-        return handle_api_error(e, "get_live_performance")
-
 @app.route('/api/health')
 def get_system_health():
     """Return comprehensive system health status for monitoring."""
@@ -419,24 +383,6 @@ def get_system_health():
                 "status": "not_initialized"
             }
         
-        # Check live performance manager health
-        if live_performance_manager is not None:
-            try:
-                validation_result = live_performance_manager.validate_state()
-                health_status["services"]["live_performance"] = {
-                    "status": "healthy",
-                    "validation": validation_result
-                }
-            except Exception as e:
-                health_status["services"]["live_performance"] = {
-                    "status": "unhealthy",
-                    "error": str(e)
-                }
-        else:
-            health_status["services"]["live_performance"] = {
-                "status": "not_initialized"
-            }
-        
         # Check circuit breaker states
         health_status["circuit_breakers"] = {
             service: {"failures": count, "state": "open" if service in circuit_breaker_state else "closed"}
@@ -458,163 +404,7 @@ def get_system_health():
             "timestamp": time.time()
         }), 500
 
-@app.route('/api/admin/clear-errors', methods=['POST'])
-def clear_system_errors():
-    """Clear system error states and reset circuit breakers."""
-    try:
-        # Clear circuit breaker states
-        global error_counts, circuit_breaker_state
-        error_counts.clear()
-        circuit_breaker_state.clear()
-        
-        # Clear data processor error state
-        if data_processor is not None:
-            data_processor.clear_error_state()
-        
-        # Clear cache
-        global _response_cache
-        _response_cache.clear()
-        
-        app.logger.info("System error states cleared")
-        return jsonify({"success": True, "message": "Error states cleared successfully"})
-        
-    except Exception as e:
-        app.logger.error(f"Error clearing system errors: {str(e)}")
-        return jsonify({"error": get_error_message("500", str(e))}), 500
 
-@app.route('/api/data-consistency')
-def get_data_consistency():
-    """Return comprehensive data consistency report across all sections."""
-    try:
-        if live_performance_manager is None or data_processor is None:
-            return jsonify({"error": get_error_message("not_initialized")}), 500
-        
-        # Get comprehensive consistency report
-        consistency_report = live_performance_manager.get_data_consistency_report()
-        
-        return jsonify(consistency_report)
-        
-    except Exception as e:
-        app.logger.error(f"Error getting data consistency report: {str(e)}")
-        return jsonify({"error": get_error_message("500", str(e))}), 500
-
-@app.route('/api/admin/invalidate-cache', methods=['POST'])
-def invalidate_cache():
-    """Invalidate all caches to force data refresh across sections."""
-    try:
-        # Clear response cache
-        global _response_cache
-        _response_cache.clear()
-        
-        # Clear data processor cache
-        if data_processor is not None:
-            data_processor.force_reload()
-        
-        # Clear live performance cache
-        if live_performance_manager is not None:
-            live_performance_manager.invalidate_cache()
-        
-        app.logger.info("All caches invalidated")
-        return jsonify({"success": True, "message": "All caches invalidated successfully"})
-        
-    except Exception as e:
-        app.logger.error(f"Error invalidating caches: {str(e)}")
-        return jsonify({"error": get_error_message("500", str(e))}), 500
-
-@app.route('/admin/control')
-def admin_control():
-    """Hidden admin control panel for managing live performance state."""
-    try:
-        # Pass Spanish translations to the template
-        translations = SPANISH_TRANSLATIONS
-        # Ensure consistent page title for admin panel
-        translations['admin_page_title'] = f"Panel de Control Administrativo - {translations['app_title']}"
-        return render_template('admin_control.html', translations=translations)
-    except Exception as e:
-        app.logger.error(f"Error rendering admin control page: {str(e)}")
-        return get_error_message("500"), 500
-
-@app.route('/api/admin/set-current-song', methods=['POST'])
-@circuit_breaker('admin_current_song')
-@retry_on_failure(max_attempts=2)
-def set_current_song():
-    """API endpoint to set the current song from admin panel with comprehensive error handling."""
-    try:
-        if live_performance_manager is None:
-            app.logger.error("Live performance manager not initialized")
-            return jsonify({"error": get_error_message("not_initialized")}), 500
-        
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": get_error_message("invalid_format", "No data provided")}), 400
-        
-        song_id = data.get('song_id')
-        
-        # Validate input
-        if song_id is not None and not isinstance(song_id, (str, type(None))):
-            return jsonify({"error": get_error_message("invalid_format", "Invalid song ID format")}), 400
-        
-        # Allow None/null to clear current song
-        if song_id == '' or song_id == 'null':
-            song_id = None
-        
-        # Validate song exists if not None
-        if song_id is not None and data_processor is not None:
-            song = data_processor.get_song_by_id(song_id)
-            if song is None:
-                return jsonify({"error": get_error_message("song_not_found")}), 404
-        
-        success = live_performance_manager.set_current_song(song_id)
-        
-        if success:
-            app.logger.info(f"Current song set to: {song_id}")
-            return jsonify({"success": True, "message": "Current song updated successfully"})
-        else:
-            return jsonify({"error": get_error_message("song_not_found")}), 404
-            
-    except Exception as e:
-        return handle_api_error(e, "set_current_song")
-
-@app.route('/api/admin/set-next-song', methods=['POST'])
-@circuit_breaker('admin_next_song')
-@retry_on_failure(max_attempts=2)
-def set_next_song():
-    """API endpoint to set the next song from admin panel with comprehensive error handling."""
-    try:
-        if live_performance_manager is None:
-            app.logger.error("Live performance manager not initialized")
-            return jsonify({"error": get_error_message("not_initialized")}), 500
-        
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": get_error_message("invalid_format", "No data provided")}), 400
-        
-        song_id = data.get('song_id')
-        
-        # Validate input
-        if song_id is not None and not isinstance(song_id, (str, type(None))):
-            return jsonify({"error": get_error_message("invalid_format", "Invalid song ID format")}), 400
-        
-        # Allow None/null to clear next song
-        if song_id == '' or song_id == 'null':
-            song_id = None
-        
-        # Validate song exists if not None
-        if song_id is not None and data_processor is not None:
-            song = data_processor.get_song_by_id(song_id)
-            if song is None:
-                return jsonify({"error": get_error_message("song_not_found")}), 404
-        
-        success = live_performance_manager.set_next_song(song_id)
-        
-        if success:
-            app.logger.info(f"Next song set to: {song_id}")
-            return jsonify({"success": True, "message": "Next song updated successfully"})
-        else:
-            return jsonify({"error": get_error_message("song_not_found")}), 404
-            
-    except Exception as e:
-        return handle_api_error(e, "set_next_song")
 
 @app.errorhandler(404)
 def not_found(error):

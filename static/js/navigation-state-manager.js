@@ -50,11 +50,6 @@ class NavigationStateManager {
             case 'song-selector':
                 // Song selector is already initialized on page load
                 break;
-            case 'live-performance':
-                if (window.livePerformanceManager && !window.livePerformanceManager.isInitialized) {
-                    window.livePerformanceManager.init();
-                }
-                break;
         }
     }
     

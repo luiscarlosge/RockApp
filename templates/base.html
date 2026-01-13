@@ -79,19 +79,6 @@
                                 </span>
                             </a>
                         </li>
-                        <li role="none">
-                            <a href="#live-performance" 
-                               class="menu-item" 
-                               role="menuitem" 
-                               data-section="live-performance"
-                               aria-describedby="live-performance-desc">
-                                <i class="bi bi-broadcast me-2" aria-hidden="true"></i>
-                                Presentación en Vivo
-                                <span id="live-performance-desc" class="visually-hidden">
-                                    Navegar a la sección de presentación en vivo
-                                </span>
-                            </a>
-                        </li>
                     </ul>
                 </div>
             </div>
@@ -214,89 +201,6 @@
                 </div>
             </section>
 
-            <!-- Live Performance Section -->
-            <section id="live-performance" 
-                     class="app-section" 
-                     aria-labelledby="live-performance-title"
-                     role="region">
-                <div class="section-header">
-                    <h2 id="live-performance-title">Presentación en Vivo</h2>
-                </div>
-                <div class="section-content">
-                    <!-- Live performance content will be populated by JavaScript -->
-                    <div class="row justify-content-center">
-                        <div class="col-12 col-lg-10">
-                            <!-- Current Song Display -->
-                            <div class="row mb-4">
-                                <div class="col-12 col-lg-6 mb-4">
-                                    <div class="card performance-card current-song" 
-                                         role="region" 
-                                         aria-labelledby="current-song-title">
-                                        <div class="card-header">
-                                            <h3 id="current-song-title" class="card-title mb-0">
-                                                <i class="bi bi-play-circle-fill me-2" aria-hidden="true"></i>
-                                                Canción Actual
-                                            </h3>
-                                        </div>
-                                        <div class="card-body">
-                                            <div id="currentSongDisplay" 
-                                                 role="status" 
-                                                 aria-live="polite"
-                                                 aria-label="Información de la canción actual">
-                                                <div class="text-center py-4">
-                                                    <i class="bi bi-music-note display-4 text-muted" aria-hidden="true"></i>
-                                                    <p class="mt-3 text-muted">No hay canción actual seleccionada</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div class="col-12 col-lg-6 mb-4">
-                                    <div class="card performance-card next-song" 
-                                         role="region" 
-                                         aria-labelledby="next-song-title">
-                                        <div class="card-header">
-                                            <h3 id="next-song-title" class="card-title mb-0">
-                                                <i class="bi bi-skip-forward-circle-fill me-2" aria-hidden="true"></i>
-                                                Próxima Canción
-                                            </h3>
-                                        </div>
-                                        <div class="card-body">
-                                            <div id="nextSongDisplay" 
-                                                 role="status" 
-                                                 aria-live="polite"
-                                                 aria-label="Información de la próxima canción">
-                                                <div class="text-center py-4">
-                                                    <i class="bi bi-music-note display-4 text-muted" aria-hidden="true"></i>
-                                                    <p class="mt-3 text-muted">No hay próxima canción seleccionada</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Performance Status -->
-                            <div class="row">
-                                <div class="col-12">
-                                    <div class="alert alert-info" 
-                                         role="status" 
-                                         aria-live="polite">
-                                        <div class="d-flex align-items-center">
-                                            <i class="bi bi-info-circle-fill me-2" aria-hidden="true"></i>
-                                            <div>
-                                                <h4 class="alert-heading mb-1">Estado de la Presentación</h4>
-                                                <p class="mb-0">La información de las canciones se actualiza desde el panel de control administrativo</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
         </main>
         
         <!-- Footer -->
@@ -315,9 +219,6 @@
     
     <!-- Enhanced Error Handler -->
     <script src="{{ url_for('static', filename='js/error-handler.js') }}"></script>
-    
-    <!-- Enhanced Polling Manager -->
-    <script src="{{ url_for('static', filename='js/enhanced-polling-manager.js') }}"></script>
     
     <!-- Navigation State Manager -->
     <script src="{{ url_for('static', filename='js/navigation-state-manager.js') }}"></script>

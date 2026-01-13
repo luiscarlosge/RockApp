@@ -311,16 +311,6 @@ class ErrorHandler {
             if (response.ok) {
                 const consistencyData = await response.json();
                 
-                // Check if data hash has changed
-                if (this.lastDataHash && 
-                    consistencyData.live_performance?.consistency?.data_hash_changed) {
-                    
-                    console.info('Data consistency change detected, refreshing sections');
-                    this.notifyDataChange();
-                }
-                
-                this.lastDataHash = consistencyData.live_performance?.consistency?.current_hash;
-                
                 // Handle consistency issues
                 if (consistencyData.overall_status !== 'healthy') {
                     console.warn('Data consistency issues detected:', consistencyData);
@@ -350,10 +340,6 @@ class ErrorHandler {
         
         if (window.musicianSelector && window.musicianSelector.clearCache) {
             window.musicianSelector.clearCache();
-        }
-        
-        if (window.livePerformanceManager && window.livePerformanceManager.refresh) {
-            window.livePerformanceManager.refresh();
         }
     }
     
