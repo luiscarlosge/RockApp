@@ -1,2 +1,4 @@
 [config]
-command = bash deploy.sh
+SCM_DO_BUILD_DURING_DEPLOYMENT=true
+ENABLE_ORYX_BUILD=true
+PRE_BUILD_SCRIPT_PATH=azure_linux_deploy.sh

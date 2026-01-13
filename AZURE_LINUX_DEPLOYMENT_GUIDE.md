@@ -1,338 +1,398 @@
 # Azure App Service Linux Deployment Guide
 
-## Musician Song Selector with Song Order Enhancement
+## Rock and Roll Forum Jam en Español - Linux Deployment
 
-This guide explains how to deploy the enhanced Musician Song Selector application to Azure App Service using a Linux plan.
+This guide provides step-by-step instructions for deploying the Flask-SocketIO application to Azure App Service on Linux.
 
 ## Prerequisites
 
-1. **Azure CLI installed**
-   ```bash
-   # Install Azure CLI (Ubuntu/Debian)
-   curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-   
-   # Or install via pip
-   pip install azure-cli
+- Azure subscription
+- Azure CLI installed (optional)
+- The `app.zip` deployment package
+
+## Deployment Package Contents
+
+The `app.zip` file contains:
+
+### Core Application Files
+- `app.py` - Main Flask application with SocketIO
+- `startup_linux.py` - Linux-optimized startup script
+- `gunicorn.conf.py` - Gunicorn configuration for production
+- `requirements_linux.txt` - Python dependencies (renamed to requirements.txt in zip)
+- `runtime_linux.txt` - Python runtime version (renamed to runtime.txt in zip)
+
+### Python Modules
+- `csv_data_processor.py` - Data processing module
+- `spanish_translations.py` - Spanish language support
+- `global_state_manager.py` - Real-time state management
+- `socketio_fallback_config.py` - WebSocket fallback configuration
+
+### Static Assets
+- `static/` - CSS, JavaScript, and other static files
+- `templates/` - Jinja2 HTML templates
+
+### Configuration Files
+- `azure_linux_config.json` - Azure-specific configuration
+- `azure_linux_deploy.sh` - Deployment script
+- `Dockerfile` - Container configuration (optional)
+- `.deployment` - Azure deployment configuration
+
+### Data Files
+- `Data.csv` - Song and musician assignment data
+
+## Step 1: Create Azure App Service
+
+### Using Azure Portal
+
+1. **Navigate to Azure Portal** (https://portal.azure.com)
+
+2. **Create a new App Service:**
+   - Click "Create a resource"
+   - Search for "App Service"
+   - Click "Create"
+
+3. **Configure Basic Settings:**
+   - **Subscription:** Select your Azure subscription
+   - **Resource Group:** Create new or select existing
+   - **Name:** Choose a unique name (e.g., `rock-app-linux-[random]`)
+   - **Publish:** Code
+   - **Runtime stack:** Python 3.11
+   - **Operating System:** Linux
+   - **Region:** Choose your preferred region
+
+4. **Configure App Service Plan:**
+   - Create new or select existing
+   - **Pricing tier:** B1 Basic or higher (required for WebSockets)
+
+5. **Review and Create:**
+   - Review settings
+   - Click "Create"
+
+### Using Azure CLI
+
+```bash
+# Create resource group
+az group create --name rock-app-rg --location "East US"
+
+# Create App Service plan
+az appservice plan create \
+  --name rock-app-plan \
+  --resource-group rock-app-rg \
+  --sku B1 \
+  --is-linux
+
+# Create App Service
+az webapp create \
+  --resource-group rock-app-rg \
+  --plan rock-app-plan \
+  --name rock-app-linux-unique \
+  --runtime "PYTHON|3.11"
+```
+
+## Step 2: Configure Application Settings
+
+### Required Application Settings
+
+Navigate to **Configuration > Application settings** and add:
+
+```
+FLASK_ENV=production
+FLASK_DEBUG=False
+WEBSOCKET_ENABLED=true
+SOCKETIO_ASYNC_MODE=eventlet
+SOCKETIO_PING_TIMEOUT=60
+SOCKETIO_PING_INTERVAL=25
+SOCKETIO_CORS_ALLOWED_ORIGINS=*
+PYTHONPATH=/home/site/wwwroot
+```
+
+### Enable WebSockets
+
+1. Go to **Configuration > General settings**
+2. Set **Web sockets** to **On**
+3. Click **Save**
+
+### Set Startup Command
+
+1. Go to **Configuration > General settings**
+2. Set **Startup Command** to:
+   ```
+   gunicorn --config gunicorn.conf.py startup_linux:application
+   ```
+3. Click **Save**
+
+## Step 3: Deploy Application
+
+### Method A: Azure CLI Deployment
+
+```bash
+az webapp deployment source config-zip \
+  --resource-group rock-app-rg \
+  --name rock-app-linux-unique \
+  --src app.zip
+```
+
+### Method B: Azure Portal Deployment
+
+1. **Navigate to Deployment Center:**
+   - Go to your App Service in Azure Portal
+   - Click "Deployment Center" in the left menu
+
+2. **Configure ZIP Deploy:**
+   - Select "ZIP Deploy" as source
+   - Click "Browse" and select `app.zip`
+   - Click "Deploy"
+
+3. **Monitor Deployment:**
+   - Watch the deployment progress
+   - Check logs for any errors
+
+### Method C: VS Code Deployment
+
+1. **Install Azure App Service Extension:**
+   - Open VS Code
+   - Install "Azure App Service" extension
+
+2. **Deploy:**
+   - Right-click on `app.zip`
+   - Select "Deploy to Web App"
+   - Choose your App Service
+
+## Step 4: Verify Deployment
+
+### Check Application Status
+
+1. **Navigate to your App Service URL:**
+   ```
+   https://your-app-name.azurewebsites.net
    ```
 
-2. **Azure subscription** with appropriate permissions
-
-3. **Git installed** for deployment
-
-## Quick Deployment
-
-### Option 1: Automated Deployment (Recommended)
-
-Run the automated deployment script:
-
-```bash
-# Make the script executable
-chmod +x deploy-to-azure-linux.sh
-
-# Run the deployment
-./deploy-to-azure-linux.sh
-```
-
-This script will:
-- Create all necessary Azure resources
-- Configure the App Service for Linux
-- Enable WebSocket support
-- Deploy your application
-- Test the deployment
-
-### Option 2: Manual Deployment
-
-#### Step 1: Login to Azure
-
-```bash
-az login
-```
-
-#### Step 2: Create Resource Group
-
-```bash
-az group create \
-    --name "rock-app-rg" \
-    --location "East US"
-```
-
-#### Step 3: Create App Service Plan (Linux)
-
-```bash
-az appservice plan create \
-    --name "rock-app-linux-plan" \
-    --resource-group "rock-app-rg" \
-    --location "East US" \
-    --is-linux \
-    --sku B1
-```
-
-#### Step 4: Create Web App
-
-```bash
-az webapp create \
-    --name "rock-app-linux" \
-    --resource-group "rock-app-rg" \
-    --plan "rock-app-linux-plan" \
-    --runtime "PYTHON|3.9"
-```
-
-#### Step 5: Configure Web App
-
-```bash
-# Enable WebSocket support
-az webapp config set \
-    --name "rock-app-linux" \
-    --resource-group "rock-app-rg" \
-    --web-sockets-enabled true
-
-# Set startup command
-az webapp config set \
-    --name "rock-app-linux" \
-    --resource-group "rock-app-rg" \
-    --startup-file "python3 startup.py"
-
-# Configure application settings
-az webapp config appsettings set \
-    --name "rock-app-linux" \
-    --resource-group "rock-app-rg" \
-    --settings \
-        FLASK_ENV=production \
-        FLASK_DEBUG=False \
-        PYTHONPATH=/home/site/wwwroot \
-        WEBSITE_WEBSOCKET_ENABLED=true \
-        SCM_DO_BUILD_DURING_DEPLOYMENT=true
-
-# Enable HTTPS only
-az webapp update \
-    --name "rock-app-linux" \
-    --resource-group "rock-app-rg" \
-    --https-only true
-```
-
-#### Step 6: Deploy Application
-
-```bash
-# Configure local Git deployment
-az webapp deployment source config-local-git \
-    --name "rock-app-linux" \
-    --resource-group "rock-app-rg"
-
-# Initialize Git repository (if not already done)
-git init
-git add .
-git commit -m "Initial commit for Azure deployment"
-
-# Get deployment URL and add as remote
-DEPLOY_URL=$(az webapp deployment list-publishing-credentials \
-    --name "rock-app-linux" \
-    --resource-group "rock-app-rg" \
-    --query scmUri -o tsv)
-
-git remote add azure $DEPLOY_URL
-
-# Push to Azure
-git push azure main:master
-```
-
-## Application Features
-
-The deployed application includes:
-
-### ✅ Core Features
-- **Song Order Enhancement**: Songs displayed and sorted by performance order
-- **Next Song Navigation**: Automatic next song calculation and display
-- **Spanish Language Support**: Complete Spanish interface and translations
-- **Real-time Synchronization**: Global song selection across all sessions
-- **WebSocket Support**: Real-time updates with fallback to polling
-
-### ✅ Technical Features
-- **Flask-SocketIO**: Real-time bidirectional communication
-- **Azure Linux Compatibility**: Optimized for Azure App Service Linux
-- **Responsive Design**: Works on desktop and mobile devices
-- **Error Handling**: Robust error handling and recovery
-- **Performance Optimized**: Fast loading and responsive interface
-
-## Configuration
-
-### Environment Variables
-
-The following environment variables are automatically configured:
-
-- `FLASK_ENV=production`
-- `FLASK_DEBUG=False`
-- `PYTHONPATH=/home/site/wwwroot`
-- `WEBSITE_WEBSOCKET_ENABLED=true`
-- `SCM_DO_BUILD_DURING_DEPLOYMENT=true`
-
-### WebSocket Configuration
-
-WebSocket support is enabled by default with the following features:
-- Primary transport: WebSocket
-- Fallback transport: Server-Sent Events and Polling
-- Ping timeout: 60 seconds
-- Ping interval: 25 seconds
-- CORS enabled for all origins
-
-## Monitoring and Troubleshooting
-
-### View Application Logs
-
-```bash
-# Stream live logs
-az webapp log tail \
-    --name "rock-app-linux" \
-    --resource-group "rock-app-rg"
-
-# Download log files
-az webapp log download \
-    --name "rock-app-linux" \
-    --resource-group "rock-app-rg"
-```
-
-### SSH into Container
-
-```bash
-az webapp ssh \
-    --name "rock-app-linux" \
-    --resource-group "rock-app-rg"
-```
-
-### Restart Application
-
-```bash
-az webapp restart \
-    --name "rock-app-linux" \
-    --resource-group "rock-app-rg"
-```
-
-### Health Check
-
-Test the application health:
-
-```bash
-curl https://rock-app-linux.azurewebsites.net/api/health
-```
-
-## File Structure
-
-The deployment includes these key files:
-
-```
-/home/site/wwwroot/
-├── app.py                    # Main Flask application
-├── startup.py               # Azure startup configuration
-├── requirements.txt         # Python dependencies
-├── Data.csv                # Song data
-├── csv_data_processor.py   # Data processing logic
-├── global_state_manager.py # Real-time state management
-├── spanish_translations.py # Spanish language support
-├── templates/              # HTML templates
-│   ├── base.html
-│   ├── index.html
-│   └── global-selector.html
-├── static/                 # Static assets
-│   ├── css/
-│   └── js/
-└── deploy.sh              # Linux deployment script
-```
-
-## Performance Considerations
-
-### Scaling
-
-For production use, consider upgrading to a higher SKU:
-
-```bash
-# Upgrade to Premium V2 for better performance
-az appservice plan update \
-    --name "rock-app-linux-plan" \
-    --resource-group "rock-app-rg" \
-    --sku P1V2
-```
-
-### Always On
-
-Enable "Always On" to prevent cold starts:
-
-```bash
-az webapp config set \
-    --name "rock-app-linux" \
-    --resource-group "rock-app-rg" \
-    --always-on true
-```
-
-## Security
-
-### HTTPS Only
-
-HTTPS is enforced by default. All HTTP requests are redirected to HTTPS.
-
-### Application Insights
-
-Enable Application Insights for monitoring:
-
-```bash
-az monitor app-insights component create \
-    --app "rock-app-insights" \
-    --location "East US" \
-    --resource-group "rock-app-rg"
-
-# Get instrumentation key
-INSTRUMENTATION_KEY=$(az monitor app-insights component show \
-    --app "rock-app-insights" \
-    --resource-group "rock-app-rg" \
-    --query instrumentationKey -o tsv)
-
-# Configure Application Insights
-az webapp config appsettings set \
-    --name "rock-app-linux" \
-    --resource-group "rock-app-rg" \
-    --settings APPINSIGHTS_INSTRUMENTATIONKEY=$INSTRUMENTATION_KEY
-```
+2. **Test API Endpoints:**
+   ```
+   https://your-app-name.azurewebsites.net/api/health
+   https://your-app-name.azurewebsites.net/api/songs
+   ```
+
+3. **Test WebSocket Connection:**
+   - Open the application in a browser
+   - Check browser developer tools for WebSocket connections
+   - Test real-time functionality
+
+### Monitor Logs
+
+1. **Enable Application Logging:**
+   - Go to **Monitoring > App Service logs**
+   - Enable **Application logging (Filesystem)**
+   - Set level to **Information**
+
+2. **View Live Logs:**
+   - Go to **Monitoring > Log stream**
+   - Monitor real-time application logs
+
+3. **Check Deployment Logs:**
+   - Go to **Deployment Center**
+   - Click on latest deployment
+   - View deployment logs
+
+## Step 5: Production Configuration
+
+### Security Settings
+
+1. **HTTPS Only:**
+   - Go to **Settings > TLS/SSL settings**
+   - Enable **HTTPS Only**
+
+2. **Custom Domain (Optional):**
+   - Go to **Settings > Custom domains**
+   - Add your custom domain
+   - Configure SSL certificate
+
+### Performance Optimization
+
+1. **Enable Application Insights:**
+   - Go to **Settings > Application Insights**
+   - Enable monitoring
+   - Configure alerts
+
+2. **Configure Auto-scaling:**
+   - Go to **Settings > Scale out (App Service plan)**
+   - Configure scale rules based on CPU/memory
+
+3. **Enable Compression:**
+   - Already configured in `gunicorn.conf.py`
+   - Verify in **Configuration > General settings**
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Application not starting**
-   - Check logs: `az webapp log tail --name rock-app-linux --resource-group rock-app-rg`
-   - Verify startup.py is present and executable
-   - Check Python dependencies in requirements.txt
+#### 1. Application Won't Start
 
-2. **WebSocket not working**
-   - Ensure WebSocket is enabled in App Service configuration
-   - Check that the client can connect to the WebSocket endpoint
-   - Verify CORS settings if accessing from different domains
+**Symptoms:** 502 Bad Gateway or application timeout
 
-3. **Spanish translations not displaying**
-   - Verify spanish_translations.py is deployed
-   - Check that translation files are properly encoded (UTF-8)
-   - Ensure templates are using the translation functions
+**Solutions:**
+- Check **Log stream** for startup errors
+- Verify **Startup Command** is correct
+- Ensure all dependencies are in `requirements.txt`
+- Check Python version matches `runtime.txt`
 
-4. **CSV data not loading**
-   - Verify Data.csv is present in the deployment
-   - Check file permissions and encoding
-   - Review csv_data_processor.py logs
+#### 2. WebSocket Connection Fails
 
-### Getting Help
+**Symptoms:** Real-time features don't work, WebSocket errors in browser
 
-- **Azure Documentation**: https://docs.microsoft.com/en-us/azure/app-service/
-- **Flask-SocketIO Documentation**: https://flask-socketio.readthedocs.io/
-- **Application Logs**: Use `az webapp log tail` for real-time debugging
+**Solutions:**
+- Verify **Web sockets** are enabled in Configuration
+- Check that `eventlet` is installed
+- Ensure gunicorn uses `eventlet` worker class
+- Test with polling transport first
 
-## Cost Optimization
+#### 3. Static Files Not Loading
 
-- **Basic Tier (B1)**: Suitable for development and testing
-- **Standard Tier (S1)**: Good for small production workloads
-- **Premium V2 (P1V2)**: Recommended for production with high availability needs
+**Symptoms:** CSS/JS files return 404 errors
 
-Monitor your usage and scale appropriately to optimize costs.
+**Solutions:**
+- Verify static files are in the deployment package
+- Check Flask static file configuration
+- Ensure proper file permissions
 
----
+#### 4. Database/CSV File Issues
 
-## Summary
+**Symptoms:** Data not loading, file not found errors
 
-This deployment guide provides everything needed to deploy the enhanced Musician Song Selector application to Azure App Service using Linux. The application includes song order enhancement, real-time synchronization, and Spanish language support, all optimized for Azure's Linux App Service platform.
+**Solutions:**
+- Verify `Data.csv` is in the deployment package
+- Check file path in application code
+- Ensure proper file permissions
 
-For questions or issues, refer to the troubleshooting section or Azure documentation.
+### Debugging Commands
+
+```bash
+# Check application logs
+az webapp log tail --resource-group rock-app-rg --name rock-app-linux-unique
+
+# SSH into container (if enabled)
+az webapp ssh --resource-group rock-app-rg --name rock-app-linux-unique
+
+# Check deployment status
+az webapp deployment list --resource-group rock-app-rg --name rock-app-linux-unique
+```
+
+### Log Analysis
+
+Common log patterns to look for:
+
+```
+# Successful startup
+Starting Gunicorn server for Rock App Linux
+Worker spawned (pid: XXXX)
+Application with SocketIO configured successfully for Linux
+
+# WebSocket issues
+WebSocket connection failed
+eventlet worker not found
+
+# File not found issues
+FileNotFoundError: Data.csv
+No such file or directory
+```
+
+## Performance Monitoring
+
+### Key Metrics to Monitor
+
+1. **Response Time:** < 2 seconds for API calls
+2. **CPU Usage:** < 80% average
+3. **Memory Usage:** < 80% of allocated memory
+4. **WebSocket Connections:** Monitor concurrent connections
+5. **Error Rate:** < 1% of requests
+
+### Setting Up Alerts
+
+1. **Navigate to Application Insights**
+2. **Create Alert Rules for:**
+   - High response time (> 5 seconds)
+   - High error rate (> 5%)
+   - High CPU usage (> 90%)
+   - Failed WebSocket connections
+
+## Backup and Recovery
+
+### Automated Backups
+
+1. **Enable Backup:**
+   - Go to **Settings > Backups**
+   - Configure backup schedule
+   - Set retention policy
+
+2. **Backup Components:**
+   - Application files
+   - Configuration settings
+   - Data files (if stored in app)
+
+### Disaster Recovery
+
+1. **Deployment Slots:**
+   - Use staging slots for testing
+   - Implement blue-green deployments
+   - Quick rollback capability
+
+2. **Multi-Region Deployment:**
+   - Deploy to multiple Azure regions
+   - Use Traffic Manager for failover
+   - Replicate data across regions
+
+## Scaling Considerations
+
+### Horizontal Scaling
+
+- **Auto-scale Rules:** Based on CPU, memory, or custom metrics
+- **Load Balancing:** Automatic with multiple instances
+- **Session Affinity:** Disable for better load distribution
+
+### Vertical Scaling
+
+- **App Service Plan Tiers:** Scale up for more CPU/memory
+- **Premium Plans:** Better performance and features
+- **Isolated Plans:** Dedicated hardware for high-traffic apps
+
+## Security Best Practices
+
+1. **Environment Variables:** Store secrets in Application Settings
+2. **HTTPS Only:** Force HTTPS for all connections
+3. **CORS Configuration:** Restrict origins in production
+4. **Authentication:** Implement if required
+5. **Rate Limiting:** Protect against abuse
+6. **Security Headers:** Configure appropriate headers
+
+## Maintenance
+
+### Regular Tasks
+
+1. **Update Dependencies:** Keep Python packages updated
+2. **Monitor Logs:** Regular log analysis
+3. **Performance Review:** Monthly performance analysis
+4. **Security Updates:** Apply security patches
+5. **Backup Verification:** Test backup restoration
+
+### Update Deployment
+
+To update the application:
+
+1. Create new `app.zip` with updated files
+2. Deploy using same method as initial deployment
+3. Monitor deployment logs
+4. Verify functionality
+5. Rollback if issues occur
+
+## Support Resources
+
+- **Azure Documentation:** https://docs.microsoft.com/azure/app-service/
+- **Flask-SocketIO Documentation:** https://flask-socketio.readthedocs.io/
+- **Gunicorn Documentation:** https://gunicorn.org/
+- **Azure Support:** Create support ticket in Azure Portal
+
+## Conclusion
+
+This deployment guide provides comprehensive instructions for deploying the Rock and Roll Forum Jam en Español application to Azure App Service on Linux. Follow the steps carefully and refer to the troubleshooting section if you encounter issues.
+
+For additional support or questions, refer to the Azure documentation or create a support ticket.

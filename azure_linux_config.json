@@ -1,0 +1,67 @@
+{
+  "name": "rock-app-linux",
+  "description": "Musician Song Selector with Song Order Enhancement - Linux App Service Configuration",
+  "runtime": {
+    "name": "python",
+    "version": "3.11"
+  },
+  "deployment": {
+    "type": "zip",
+    "source": "app.zip",
+    "startup_command": "gunicorn --config gunicorn.conf.py startup_linux:application"
+  },
+  "startup": {
+    "command": "gunicorn --config gunicorn.conf.py startup_linux:application",
+    "timeout": 120
+  },
+  "environment": {
+    "FLASK_ENV": "production",
+    "FLASK_DEBUG": "False",
+    "PYTHONPATH": "/home/site/wwwroot",
+    "WEBSITE_HOSTNAME": "${WEBSITE_HOSTNAME}",
+    "PORT": "${PORT}",
+    "WEBSOCKET_ENABLED": "true",
+    "SOCKETIO_ASYNC_MODE": "eventlet",
+    "SOCKETIO_PING_TIMEOUT": "60",
+    "SOCKETIO_PING_INTERVAL": "25",
+    "SOCKETIO_CORS_ALLOWED_ORIGINS": "*"
+  },
+  "features": {
+    "websockets": true,
+    "always_on": true,
+    "http20_enabled": true,
+    "remote_debugging": false,
+    "app_service_logs": true,
+    "detailed_errors": false
+  },
+  "scaling": {
+    "min_instances": 1,
+    "max_instances": 3,
+    "scale_out_cooldown": "PT5M",
+    "scale_in_cooldown": "PT5M",
+    "auto_scale_enabled": true
+  },
+  "monitoring": {
+    "application_insights": true,
+    "logging_level": "INFO",
+    "log_retention_days": 30,
+    "health_check_path": "/api/health"
+  },
+  "security": {
+    "https_only": true,
+    "min_tls_version": "1.2",
+    "ftps_state": "FtpsOnly",
+    "client_affinity_enabled": false
+  },
+  "networking": {
+    "ip_security_restrictions": [],
+    "scm_ip_security_restrictions": [],
+    "vnet_integration": false
+  },
+  "performance": {
+    "preload_enabled": true,
+    "compression_enabled": true,
+    "static_file_caching": true,
+    "connection_timeout": 230
+  }
+}
