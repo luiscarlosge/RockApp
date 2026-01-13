@@ -2,25 +2,28 @@
 
 ## Overview
 
-This design outlines the systematic removal of live performance and admin control features from the Rock and Roll Forum Jam en Español application. The removal will simplify the application architecture while preserving all core song and musician selector functionality.
+This design outlines the systematic removal of live performance, admin control, and real-time WebSocket/SocketIO features from the Rock and Roll Forum Jam en Español application. The removal will simplify the application architecture while preserving all core song and musician selector functionality.
 
-The approach focuses on clean removal with minimal disruption to existing functionality, ensuring the application remains stable and maintainable after the changes.
+The approach focuses on clean removal with minimal disruption to existing functionality, ensuring the application remains stable and maintainable after the changes. The application will transition from a real-time WebSocket-based system to a simple HTTP-based system.
 
 ## Architecture
 
 ### Current Architecture
-The application currently has three main sections:
+The application currently has three main sections with real-time WebSocket communication:
 1. **Song Selector** - Core functionality for browsing songs and viewing musician assignments
 2. **Musician Selector** - Core functionality for browsing musicians and their song assignments  
 3. **Live Performance** - Real-time display of current/next songs (TO BE REMOVED)
+4. **WebSocket System** - Real-time communication and session synchronization (TO BE REMOVED)
 
 ### Target Architecture
-After removal, the application will have a simplified two-section architecture:
+After removal, the application will have a simplified two-section architecture with HTTP-only communication:
 1. **Song Selector** - Preserved with all existing functionality
 2. **Musician Selector** - Preserved with all existing functionality
 
 ### Architectural Changes
 - Remove live performance section from the main application layout
+- Remove all WebSocket/SocketIO infrastructure and real-time communication
+- Convert to simple HTTP-based request/response architecture
 - Simplify navigation menu to two sections only
 - Remove all live performance backend services and APIs
 - Remove admin control panel and related infrastructure
@@ -32,37 +35,54 @@ After removal, the application will have a simplified two-section architecture:
 
 #### JavaScript Classes
 - `LivePerformanceManager` class in `static/js/app.js`
+- `ConnectionManager` class in `static/js/connection-manager.js` - Complete file removal
 - Admin control functionality in `static/js/admin_control.js`
 - Enhanced polling manager dependencies for live performance
+- All SocketIO client-side event handlers and initialization
+- Real-time update functionality in song and musician selectors
 
 #### HTML Templates
 - `templates/admin_control.html` - Complete removal
 - Live performance section in `templates/base.html`
 - Navigation menu items for live performance
+- WebSocket connection status indicators
+- Real-time synchronization UI elements
 
 #### CSS Styles
 - Live performance card styles
 - Admin control panel styles
 - Performance status indicators
+- Connection status indicator styles
+- Real-time update animations and transitions
 
 ### Backend Components to Remove
 
-#### Python Classes
+#### Python Classes and Modules
 - `LivePerformanceManager` class in `live_performance_manager.py`
+- `GlobalStateManager` class in `global_state_manager.py` - Complete file removal
+- `SocketIOFallbackConfig` class in `socketio_fallback_config.py` - Complete file removal
 - All live performance session management
 - Live performance data consistency validation
+- All SocketIO event handlers and decorators
 
 #### API Endpoints
 - `/api/live-performance` - GET endpoint for performance state
 - `/api/admin/set-current-song` - POST endpoint for setting current song
 - `/api/admin/set-next-song` - POST endpoint for setting next song
 - `/admin/control` - Admin control panel route
+- `/api/global/current-song` - GET endpoint for global song state
+- `/api/global/set-song` - POST endpoint for setting global song
 - All related admin API endpoints
+- All SocketIO event endpoints (connect, disconnect, join_global_session, etc.)
 
-#### Dependencies
+#### Dependencies and Configuration
+- Flask-SocketIO imports and initialization
 - Session-based state management for live performance
 - Circuit breaker patterns for live performance APIs
 - Live performance data caching
+- WebSocket-specific gunicorn configuration
+- SocketIO fallback and transport configuration
+- Real-time broadcasting and session synchronization
 
 ### Components to Preserve
 
@@ -118,9 +138,13 @@ Based on the prework analysis, I'll create properties that validate the key aspe
 *For any* application startup or core operation, the application should run without errors related to removed functionality
 **Validates: Requirements 7.1, 7.3**
 
-**Property 5: Live performance polling removal**
-*For any* application session, no HTTP requests should be made to live performance endpoints
-**Validates: Requirements 1.4**
+**Property 6: WebSocket functionality completely removed**
+*For any* application session or HTTP request, no WebSocket connections should be established or attempted
+**Validates: Requirements 7.1, 7.2, 7.3, 8.2, 8.5**
+
+**Property 7: SocketIO dependencies removed**
+*For any* application startup, no Flask-SocketIO or WebSocket-related imports should be loaded or initialized
+**Validates: Requirements 7.1, 9.1, 9.2**
 
 ## Error Handling
 

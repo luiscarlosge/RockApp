@@ -1,6 +1,6 @@
 """
 Gunicorn configuration for Azure App Service Linux deployment
-Optimized for Flask-SocketIO applications with WebSocket support
+Optimized for standard Flask applications
 """
 
 import os
@@ -12,7 +12,7 @@ backlog = 2048
 
 # Worker processes
 workers = multiprocessing.cpu_count() * 2 + 1
-worker_class = "eventlet"  # Required for SocketIO
+worker_class = "sync"  # Standard synchronous workers
 worker_connections = 1000
 max_requests = 1000
 max_requests_jitter = 50
@@ -50,11 +50,7 @@ raw_env = [
     f'FLASK_DEBUG={os.environ.get("FLASK_DEBUG", "False")}',
     f'PYTHONPATH={os.environ.get("PYTHONPATH", "/home/site/wwwroot")}',
     f'WEBSITE_HOSTNAME={os.environ.get("WEBSITE_HOSTNAME", "")}',
-    f'PORT={os.environ.get("PORT", "8000")}',
-    'WEBSOCKET_ENABLED=true',
-    'SOCKETIO_ASYNC_MODE=eventlet',
-    'SOCKETIO_PING_TIMEOUT=60',
-    'SOCKETIO_PING_INTERVAL=25'
+    f'PORT={os.environ.get("PORT", "8000")}'
 ]
 
 # Preload application for better performance

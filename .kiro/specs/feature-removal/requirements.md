@@ -2,12 +2,16 @@
 
 ## Introduction
 
-This specification defines the requirements for removing the live performance and admin control features from the Rock and Roll Forum Jam en Español application. The goal is to simplify the application by removing unnecessary complexity while preserving the core song and musician selector functionality.
+This specification defines the requirements for removing the live performance, admin control, and real-time WebSocket/SocketIO features from the Rock and Roll Forum Jam en Español application. The goal is to simplify the application by removing unnecessary complexity while preserving the core song and musician selector functionality.
 
 ## Glossary
 
 - **Live_Performance_Section**: The section of the application that displays current and next songs during live performances
 - **Admin_Control_Panel**: The administrative interface for managing live performance state
+- **SocketIO_System**: The real-time WebSocket communication system using Flask-SocketIO
+- **Connection_Manager**: The JavaScript class managing WebSocket connections and real-time updates
+- **Global_State_Manager**: The Python class managing real-time session state and synchronization
+- **Real_Time_Features**: All WebSocket-based real-time communication and synchronization features
 - **Song_Selector**: The core functionality for browsing and viewing song details
 - **Musician_Selector**: The core functionality for browsing musicians and their assigned songs
 - **Navigation_Menu**: The hamburger menu system for switching between application sections
@@ -81,7 +85,44 @@ This specification defines the requirements for removing the live performance an
 3. THE Core_Application SHALL remove all unused Python imports and dependencies
 4. THE Core_Application SHALL remove all unused HTML templates and template sections
 
-### Requirement 7: Maintain Application Stability
+### Requirement 7: Remove WebSocket/SocketIO System
+
+**User Story:** As a system administrator, I want all real-time WebSocket functionality removed, so that the application operates with simple HTTP requests only.
+
+#### Acceptance Criteria
+
+1. THE Core_Application SHALL remove all Flask-SocketIO imports and initialization
+2. THE Core_Application SHALL remove all SocketIO event handlers and decorators
+3. THE Core_Application SHALL remove all WebSocket connection management code
+4. THE Core_Application SHALL remove all real-time broadcasting and session synchronization
+5. THE Core_Application SHALL remove the Global_State_Manager and all session tracking
+6. THE Core_Application SHALL remove all SocketIO configuration files and fallback systems
+
+### Requirement 8: Remove Real-Time Frontend Components
+
+**User Story:** As a user, I want the application to work without WebSocket connections, so that it functions reliably with standard HTTP requests.
+
+#### Acceptance Criteria
+
+1. THE Core_Application SHALL remove the Connection_Manager JavaScript class
+2. THE Core_Application SHALL remove all SocketIO client-side initialization and event handlers
+3. THE Core_Application SHALL remove all real-time update functionality from the frontend
+4. THE Core_Application SHALL remove all WebSocket connection status indicators
+5. THE Core_Application SHALL remove all real-time synchronization between browser sessions
+
+### Requirement 9: Remove WebSocket Dependencies and Configuration
+
+**User Story:** As a system maintainer, I want all WebSocket-related dependencies removed, so that the application has a simpler deployment and fewer potential points of failure.
+
+#### Acceptance Criteria
+
+1. THE Core_Application SHALL remove Flask-SocketIO from requirements.txt
+2. THE Core_Application SHALL remove eventlet and other WebSocket-specific dependencies
+3. THE Core_Application SHALL remove all SocketIO configuration from gunicorn and startup files
+4. THE Core_Application SHALL remove all WebSocket-specific environment variables and settings
+5. THE Core_Application SHALL update deployment configurations to remove WebSocket support
+
+### Requirement 10: Maintain Application Stability
 
 **User Story:** As a user, I want the application to remain stable after the feature removal, so that I can continue using it without issues.
 

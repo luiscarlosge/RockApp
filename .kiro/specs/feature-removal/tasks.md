@@ -2,7 +2,7 @@
 
 ## Overview
 
-This implementation plan systematically removes live performance and admin control features while preserving all core song and musician selector functionality. Based on analysis of the current codebase, all targeted components are present and need to be removed in the specified order to minimize risk.
+This implementation plan systematically removes live performance, admin control, and real-time WebSocket/SocketIO features while preserving all core song and musician selector functionality. The application will transition from a real-time WebSocket-based system to a simple HTTP-based system.
 
 ## Tasks
 
@@ -146,7 +146,124 @@ This implementation plan systematically removes live performance and admin contr
   - Verify application performance is maintained
   - _Requirements: 7.2, 7.3_
 
-- [ ] 8. Final checkpoint - Ensure all tests pass
+- [x] 8. Remove WebSocket/SocketIO backend system
+- [x] 8.1 Remove Flask-SocketIO imports and initialization
+  - Remove `from flask_socketio import SocketIO, emit, join_room, leave_room` from `app.py`
+  - Remove `socketio = SocketIO(app, **socketio_config)` initialization
+  - Remove all SocketIO configuration and fallback imports
+  - _Requirements: 7.1, 7.2_
+
+- [x] 8.2 Remove all SocketIO event handlers
+  - Remove `@socketio.on('connect')` handler and `handle_connect()` function
+  - Remove `@socketio.on('disconnect')` handler and `handle_disconnect()` function
+  - Remove `@socketio.on('join_global_session')` handler and function
+  - Remove `@socketio.on('select_global_song')` handler and function
+  - Remove `@socketio.on('request_current_song')` handler and function
+  - Remove `@socketio.on('ping')` handler and function
+  - Remove `@socketio.on('cleanup_sessions')` handler and function
+  - _Requirements: 7.2, 7.4_
+
+- [x] 8.3 Remove GlobalStateManager and related files
+  - Delete `global_state_manager.py` file completely
+  - Remove `from global_state_manager import GlobalStateManager` import from `app.py`
+  - Remove `global_state_manager = GlobalStateManager()` initialization
+  - Remove all global state manager usage throughout `app.py`
+  - _Requirements: 7.5_
+
+- [x] 8.4 Remove SocketIO configuration files
+  - Delete `socketio_fallback_config.py` file completely
+  - Remove `from socketio_fallback_config import SocketIOFallbackConfig` import
+  - Remove all SocketIO configuration references
+  - _Requirements: 7.6_
+
+- [x] 8.5 Remove global song API endpoints
+  - Remove `/api/global/current-song` endpoint from `app.py`
+  - Remove `/api/global/set-song` endpoint from `app.py`
+  - Remove all global state management API endpoints
+  - _Requirements: 7.4_
+
+- [ ]* 8.6 Write property test for WebSocket removal
+  - **Property 6: WebSocket functionality completely removed**
+  - **Validates: Requirements 7.1, 7.2, 7.3, 8.2, 8.5**
+
+- [x] 9. Remove WebSocket frontend components
+- [x] 9.1 Remove ConnectionManager JavaScript class
+  - Delete `static/js/connection-manager.js` file completely
+  - Remove connection manager initialization from `static/js/app.js`
+  - Remove all connection manager references and usage
+  - _Requirements: 8.1_
+
+- [x] 9.2 Remove SocketIO client-side initialization
+  - Remove SocketIO script includes from `templates/base.html`
+  - Remove all `socket.on()` event handlers from JavaScript files
+  - Remove all `socket.emit()` calls from JavaScript files
+  - Remove WebSocket connection establishment code
+  - _Requirements: 8.2, 8.3_
+
+- [x] 9.3 Remove real-time update functionality
+  - Remove real-time song change handlers from `static/js/app.js`
+  - Remove connection status indicators from templates
+  - Remove real-time synchronization code from song and musician selectors
+  - Remove WebSocket connection status UI elements
+  - _Requirements: 8.4, 8.5_
+
+- [ ]* 9.4 Write property test for real-time functionality removal
+  - **Property 6: WebSocket functionality completely removed**
+  - **Validates: Requirements 7.1, 7.2, 7.3, 8.2, 8.5**
+
+- [x] 10. Remove WebSocket dependencies and configuration
+- [x] 10.1 Update requirements.txt
+  - Remove `Flask-SocketIO` from `requirements.txt`
+  - Remove `eventlet` from `requirements.txt`
+  - Remove other WebSocket-specific dependencies
+  - _Requirements: 9.1, 9.2_
+
+- [x] 10.2 Update gunicorn configuration
+  - Change `worker_class = "eventlet"` to `worker_class = "sync"` in `gunicorn.conf.py`
+  - Remove WebSocket-specific environment variables
+  - Remove SocketIO configuration from gunicorn settings
+  - _Requirements: 9.3, 9.4_
+
+- [x] 10.3 Update startup configuration files
+  - Remove SocketIO configuration from `startup_linux.py`
+  - Remove WebSocket-specific settings and initialization
+  - Update application factory to use standard Flask without SocketIO
+  - _Requirements: 9.3, 9.4_
+
+- [x] 10.4 Update application startup
+  - Change `socketio.run()` to `app.run()` in `app.py` main section
+  - Remove SocketIO-specific run parameters
+  - Update for standard Flask application startup
+  - _Requirements: 9.5_
+
+- [ ]* 10.5 Write property test for dependency removal
+  - **Property 7: SocketIO dependencies removed**
+  - **Validates: Requirements 7.1, 9.1, 9.2**
+
+- [x] 11. Final integration and stability testing
+- [x] 11.1 Test application startup without WebSocket
+  - Verify application starts without SocketIO dependencies
+  - Verify no WebSocket-related errors in logs
+  - Verify standard Flask application runs correctly
+  - _Requirements: 10.1_
+
+- [x] 11.2 Write property test for application stability
+  - **Property 4: Application stability**
+  - **Validates: Requirements 10.1, 10.3**
+
+- [x] 11.3 Test core functionality without real-time features
+  - Verify song selector works without WebSocket connections
+  - Verify musician selector works without real-time updates
+  - Verify navigation works correctly
+  - _Requirements: 10.2_
+
+- [x] 11.4 Verify no WebSocket connection attempts
+  - Monitor network traffic to ensure no WebSocket connections
+  - Verify browser console shows no WebSocket errors
+  - Verify application works entirely with HTTP requests
+  - _Requirements: 8.5, 10.2_
+
+- [x] 12. Final checkpoint - Ensure all tests pass
 - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
@@ -154,8 +271,9 @@ This implementation plan systematically removes live performance and admin contr
 - Tasks marked with `*` are optional and can be skipped for faster implementation
 - Each task references specific requirements for traceability
 - The order of tasks minimizes risk by removing backend services before frontend components
+- WebSocket/SocketIO removal is done after live performance removal to maintain system stability
 - Core functionality testing ensures no regressions are introduced
 - Property tests validate universal correctness properties
 - Unit tests validate specific removal requirements
 - All targeted files and components have been verified to exist in the current codebase
-- Test Azure App Repo
+- Application will transition from WebSocket-based to HTTP-only architecture
