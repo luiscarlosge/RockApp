@@ -1,117 +1,266 @@
-@if "%SCM_TRACE_LEVEL%" NEQ "4" @echo off
+#!/bin/bash
 
-:: ----------------------
-:: KUDU Deployment Script
-:: Version: 1.0.17
-:: ----------------------
+# ----------------------
+# Azure App Service Linux Deployment Script
+# For Python Flask Application with SocketIO
+# ----------------------
 
-:: Prerequisites
-:: -------------
+set -e
 
-:: Verify node.js installed
-where node 2>nul >nul
-IF %ERRORLEVEL% NEQ 0 (
-  echo Missing node.js executable, please install node.js, if already installed make sure it can be reached from current environment.
-  goto error
-)
+echo "Starting Azure App Service Linux deployment..."
 
-:: Setup
-:: -----
+# Get deployment paths
+DEPLOYMENT_SOURCE=${DEPLOYMENT_SOURCE:-$PWD}
+DEPLOYMENT_TARGET=${DEPLOYMENT_TARGET:-/home/site/wwwroot}
+ARTIFACTS=${ARTIFACTS:-/tmp/artifacts}
 
-setlocal enabledelayedexpansion
+echo "Deployment source: $DEPLOYMENT_SOURCE"
+echo "Deployment target: $DEPLOYMENT_TARGET"
 
-SET ARTIFACTS=%~dp0%..\artifacts
+# Create artifacts directory if it doesn't exist
+mkdir -p "$ARTIFACTS"
 
-IF NOT DEFINED DEPLOYMENT_SOURCE (
-  SET DEPLOYMENT_SOURCE=%~dp0%.
-)
+# Function to log and execute commands
+execute_cmd() {
+    echo "Executing: $*"
+    if ! "$@"; then
+        echo "Command failed: $*"
+        exit 1
+    fi
+}
 
-IF NOT DEFINED DEPLOYMENT_TARGET (
-  SET DEPLOYMENT_TARGET=%ARTIFACTS%\wwwroot
-)
+# ----------------------
+# 1. Copy application files
+# ----------------------
+echo "Copying application files..."
 
-IF NOT DEFINED NEXT_MANIFEST_PATH (
-  SET NEXT_MANIFEST_PATH=%ARTIFACTS%\manifest
+# Create target directory if it doesn't exist
+mkdir -p "$DEPLOYMENT_TARGET"
 
-  IF NOT DEFINED PREVIOUS_MANIFEST_PATH (
-    SET PREVIOUS_MANIFEST_PATH=%ARTIFACTS%\manifest
-  )
-)
+# Copy all files except excluded ones
+rsync -av \
+    --exclude='.git' \
+    --exclude='.gitignore' \
+    --exclude='__pycache__' \
+    --exclude='*.pyc' \
+    --exclude='.pytest_cache' \
+    --exclude='.hypothesis' \
+    --exclude='node_modules' \
+    --exclude='.vscode' \
+    --exclude='deploy.sh' \
+    --exclude='.deployment' \
+    "$DEPLOYMENT_SOURCE/" "$DEPLOYMENT_TARGET/"
 
-IF NOT DEFINED KUDU_SYNC_CMD (
-  :: Install kudu sync
-  echo Installing Kudu Sync
-  call npm install kudusync -g --silent
-  IF !ERRORLEVEL! NEQ 0 goto error
+echo "Application files copied successfully"
 
-  :: Locally just running "kuduSync" would also work
-  SET KUDU_SYNC_CMD=%appdata%\npm\kuduSync.cmd
-)
+# ----------------------
+# 2. Verify critical files
+# ----------------------
+echo "Verifying critical files..."
 
-::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-:: Deployment
-:: ----------
+# Check for Data.csv
+if [ ! -f "$DEPLOYMENT_TARGET/Data.csv" ]; then
+    echo "ERROR: Data.csv file is missing from deployment"
+    exit 1
+else
+    echo "✓ Data.csv file found"
+fi
 
-echo Handling python deployment.
+# Check for startup.py
+if [ ! -f "$DEPLOYMENT_TARGET/startup.py" ]; then
+    echo "ERROR: startup.py file is missing from deployment"
+    exit 1
+else
+    echo "✓ startup.py file found"
+fi
 
-:: 1. KuduSync
-IF /I "%IN_PLACE_DEPLOYMENT%" NEQ "1" (
-  call :ExecuteCmd "%KUDU_SYNC_CMD%" -v 50 -f "%DEPLOYMENT_SOURCE%" -t "%DEPLOYMENT_TARGET%" -n "%NEXT_MANIFEST_PATH%" -p "%PREVIOUS_MANIFEST_PATH%" -i ".git;.hg;.deployment;deploy.cmd"
-  IF !ERRORLEVEL! NEQ 0 goto error
-)
+# Check for requirements.txt
+if [ ! -f "$DEPLOYMENT_TARGET/requirements.txt" ]; then
+    echo "ERROR: requirements.txt file is missing from deployment"
+    exit 1
+else
+    echo "✓ requirements.txt file found"
+fi
 
-:: 2. Install Python packages
-IF EXIST "%DEPLOYMENT_TARGET%\requirements.txt" (
-  echo Installing Python packages from requirements.txt
-  pushd "%DEPLOYMENT_TARGET%"
-  python -m pip install --upgrade pip
-  python -m pip install -r requirements.txt
-  IF !ERRORLEVEL! NEQ 0 goto error
-  popd
-)
+# Check for app.py
+if [ ! -f "$DEPLOYMENT_TARGET/app.py" ]; then
+    echo "ERROR: app.py file is missing from deployment"
+    exit 1
+else
+    echo "✓ app.py file found"
+fi
 
-:: 3. Verify CSV data file is present
-IF NOT EXIST "%DEPLOYMENT_TARGET%\Data.csv" (
-  echo ERROR: Data.csv file is missing from deployment
-  goto error
-) ELSE (
-  echo Data.csv file found in deployment package
-)
+# ----------------------
+# 3. Install Python dependencies
+# ----------------------
+echo "Installing Python dependencies..."
 
-:: 4. Verify startup.py is present
-IF NOT EXIST "%DEPLOYMENT_TARGET%\startup.py" (
-  echo ERROR: startup.py file is missing from deployment
-  goto error
-) ELSE (
-  echo startup.py file found in deployment package
-)
+cd "$DEPLOYMENT_TARGET"
 
-:: 5. Set Python path and environment
-echo Setting up Python environment for Azure App Service
+# Upgrade pip
+execute_cmd python -m pip install --upgrade pip
 
-::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-goto end
+# Install requirements
+execute_cmd python -m pip install -r requirements.txt
 
-:: Execute command routine that will echo out when error
-:ExecuteCmd
-setlocal
-set _CMD_=%*
-call %_CMD_%
-if "%ERRORLEVEL%" NEQ "0" echo Failed exitCode=%ERRORLEVEL%, command=%_CMD_%
-exit /b %ERRORLEVEL%
+echo "Python dependencies installed successfully"
 
-:error
-endlocal
-echo An error has occurred during web site deployment.
-call :exitSetErrorLevel
-call :exitFromFunction 2>nul
+# ----------------------
+# 4. Set up application configuration
+# ----------------------
+echo "Setting up application configuration..."
 
-:exitSetErrorLevel
-exit /b 1
+# Create a simple web.config for Azure App Service Linux (optional)
+cat > "$DEPLOYMENT_TARGET/web.config" << 'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <system.webServer>
+    <handlers>
+      <add name="PythonHandler" path="*" verb="*" modules="httpPlatformHandler" resourceType="Unspecified"/>
+    </handlers>
+    <httpPlatform processPath="/opt/python/3.9/bin/python"
+                  arguments="startup.py"
+                  stdoutLogEnabled="true"
+                  stdoutLogFile="/home/LogFiles/python.log"
+                  startupTimeLimit="60"
+                  requestTimeout="00:04:00">
+      <environmentVariables>
+        <environmentVariable name="PYTHONPATH" value="/home/site/wwwroot" />
+        <environmentVariable name="PORT" value="%HTTP_PLATFORM_PORT%" />
+        <environmentVariable name="WEBSITE_HOSTNAME" value="%WEBSITE_HOSTNAME%" />
+      </environmentVariables>
+    </httpPlatform>
+    <webSocket enabled="true" />
+  </system.webServer>
+</configuration>
+EOF
 
-:exitFromFunction
-()
+# ----------------------
+# 5. Validate Python application
+# ----------------------
+echo "Validating Python application..."
 
-:end
-endlocal
-echo Finished successfully.
+# Test import of main modules
+python -c "
+import sys
+sys.path.insert(0, '.')
+try:
+    from app import app
+    print('✓ Flask app imports successfully')
+except Exception as e:
+    print(f'✗ Flask app import failed: {e}')
+    sys.exit(1)
+
+try:
+    from startup import application
+    print('✓ Startup module imports successfully')
+except Exception as e:
+    print(f'✗ Startup module import failed: {e}')
+    sys.exit(1)
+
+try:
+    import flask_socketio
+    print('✓ Flask-SocketIO available')
+except Exception as e:
+    print(f'✗ Flask-SocketIO import failed: {e}')
+    sys.exit(1)
+"
+
+# ----------------------
+# 6. Set proper permissions
+# ----------------------
+echo "Setting file permissions..."
+
+# Make startup.py executable
+chmod +x "$DEPLOYMENT_TARGET/startup.py"
+
+# Set proper permissions for the application directory
+find "$DEPLOYMENT_TARGET" -type f -name "*.py" -exec chmod 644 {} \;
+find "$DEPLOYMENT_TARGET" -type d -exec chmod 755 {} \;
+
+# ----------------------
+# 7. Create startup command file for Azure
+# ----------------------
+echo "Creating startup command configuration..."
+
+# Create a startup command file that Azure App Service can use
+cat > "$DEPLOYMENT_TARGET/startup_command.txt" << 'EOF'
+python startup.py
+EOF
+
+# ----------------------
+# 8. Log deployment information
+# ----------------------
+echo "Logging deployment information..."
+
+echo "Deployment completed at: $(date)"
+echo "Python version: $(python --version)"
+echo "Pip version: $(pip --version)"
+echo "Working directory: $(pwd)"
+echo "Files in deployment target:"
+ls -la "$DEPLOYMENT_TARGET" | head -20
+
+echo "Python packages installed:"
+pip list | grep -E "(Flask|socketio|gunicorn|pandas)" || true
+
+# ----------------------
+# 9. Final validation
+# ----------------------
+echo "Performing final validation..."
+
+# Check if all critical Python modules can be imported
+python -c "
+import sys
+import os
+sys.path.insert(0, '.')
+
+modules_to_test = [
+    'flask',
+    'flask_socketio', 
+    'pandas',
+    'csv_data_processor',
+    'global_state_manager',
+    'spanish_translations'
+]
+
+failed_imports = []
+for module in modules_to_test:
+    try:
+        __import__(module)
+        print(f'✓ {module}')
+    except ImportError as e:
+        print(f'✗ {module}: {e}')
+        failed_imports.append(module)
+
+if failed_imports:
+    print(f'Failed to import: {failed_imports}')
+    sys.exit(1)
+else:
+    print('All critical modules imported successfully')
+"
+
+echo ""
+echo "=============================================="
+echo "✅ AZURE LINUX DEPLOYMENT COMPLETED SUCCESSFULLY"
+echo "=============================================="
+echo ""
+echo "Application Details:"
+echo "- Flask application with SocketIO support"
+echo "- Song Order Enhancement features enabled"
+echo "- Spanish language support included"
+echo "- Real-time synchronization ready"
+echo "- WebSocket support configured for Azure"
+echo ""
+echo "Startup Information:"
+echo "- Main application file: startup.py"
+echo "- Port: Configured via PORT environment variable"
+echo "- Host: 0.0.0.0 (all interfaces)"
+echo "- WebSocket: Enabled with fallback to polling"
+echo ""
+echo "Next Steps:"
+echo "1. Configure Azure App Service startup command: 'python startup.py'"
+echo "2. Enable WebSocket support in Azure App Service configuration"
+echo "3. Set any required environment variables"
+echo "4. Monitor application logs for successful startup"
+echo ""
+echo "Deployment completed successfully!"

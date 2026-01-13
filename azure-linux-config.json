@@ -1,0 +1,50 @@
+{
+  "name": "rock-app-linux",
+  "description": "Musician Song Selector with Song Order Enhancement - Linux App Service Configuration",
+  "runtime": {
+    "name": "python",
+    "version": "3.9"
+  },
+  "deployment": {
+    "type": "git",
+    "source": "local",
+    "script": "deploy.sh"
+  },
+  "startup": {
+    "command": "python startup.py",
+    "timeout": 120
+  },
+  "environment": {
+    "FLASK_ENV": "production",
+    "FLASK_DEBUG": "False",
+    "PYTHONPATH": "/home/site/wwwroot",
+    "WEBSITE_HOSTNAME": "${WEBSITE_HOSTNAME}",
+    "PORT": "${PORT}"
+  },
+  "features": {
+    "websockets": true,
+    "always_on": true,
+    "http20_enabled": true,
+    "remote_debugging": false
+  },
+  "scaling": {
+    "min_instances": 1,
+    "max_instances": 3,
+    "scale_out_cooldown": "PT5M",
+    "scale_in_cooldown": "PT5M"
+  },
+  "monitoring": {
+    "application_insights": true,
+    "logging_level": "INFO",
+    "log_retention_days": 30
+  },
+  "security": {
+    "https_only": true,
+    "min_tls_version": "1.2",
+    "ftps_state": "FtpsOnly"
+  },
+  "networking": {
+    "ip_security_restrictions": [],
+    "scm_ip_security_restrictions": []
+  }
+}
