@@ -29,6 +29,22 @@ execute_cmd() {
     fi
 }
 
+# Function to find Python executable
+find_python() {
+    if command -v python3 &> /dev/null; then
+        echo "python3"
+    elif command -v python &> /dev/null; then
+        echo "python"
+    else
+        echo "ERROR: Python not found"
+        exit 1
+    fi
+}
+
+# Set Python command
+PYTHON_CMD=$(find_python)
+echo "Using Python command: $PYTHON_CMD"
+
 # ----------------------
 # 1. Copy application files
 # ----------------------
@@ -98,10 +114,10 @@ echo "Installing Python dependencies..."
 cd "$DEPLOYMENT_TARGET"
 
 # Upgrade pip
-execute_cmd python -m pip install --upgrade pip
+execute_cmd $PYTHON_CMD -m pip install --upgrade pip
 
 # Install requirements
-execute_cmd python -m pip install -r requirements.txt
+execute_cmd $PYTHON_CMD -m pip install -r requirements.txt
 
 echo "Python dependencies installed successfully"
 
@@ -118,7 +134,7 @@ cat > "$DEPLOYMENT_TARGET/web.config" << 'EOF'
     <handlers>
       <add name="PythonHandler" path="*" verb="*" modules="httpPlatformHandler" resourceType="Unspecified"/>
     </handlers>
-    <httpPlatform processPath="/opt/python/3.9/bin/python"
+    <httpPlatform processPath="/usr/bin/python3"
                   arguments="startup.py"
                   stdoutLogEnabled="true"
                   stdoutLogFile="/home/LogFiles/python.log"
@@ -141,7 +157,7 @@ EOF
 echo "Validating Python application..."
 
 # Test import of main modules
-python -c "
+$PYTHON_CMD -c "
 import sys
 sys.path.insert(0, '.')
 try:
@@ -184,8 +200,8 @@ find "$DEPLOYMENT_TARGET" -type d -exec chmod 755 {} \;
 echo "Creating startup command configuration..."
 
 # Create a startup command file that Azure App Service can use
-cat > "$DEPLOYMENT_TARGET/startup_command.txt" << 'EOF'
-python startup.py
+cat > "$DEPLOYMENT_TARGET/startup_command.txt" << EOF
+$PYTHON_CMD startup.py
 EOF
 
 # ----------------------
@@ -194,14 +210,14 @@ EOF
 echo "Logging deployment information..."
 
 echo "Deployment completed at: $(date)"
-echo "Python version: $(python --version)"
-echo "Pip version: $(pip --version)"
+echo "Python version: $($PYTHON_CMD --version)"
+echo "Pip version: $($PYTHON_CMD -m pip --version)"
 echo "Working directory: $(pwd)"
 echo "Files in deployment target:"
 ls -la "$DEPLOYMENT_TARGET" | head -20
 
 echo "Python packages installed:"
-pip list | grep -E "(Flask|socketio|gunicorn|pandas)" || true
+$PYTHON_CMD -m pip list | grep -E "(Flask|socketio|gunicorn|pandas)" || true
 
 # ----------------------
 # 9. Final validation
@@ -209,7 +225,7 @@ pip list | grep -E "(Flask|socketio|gunicorn|pandas)" || true
 echo "Performing final validation..."
 
 # Check if all critical Python modules can be imported
-python -c "
+$PYTHON_CMD -c "
 import sys
 import os
 sys.path.insert(0, '.')
@@ -258,7 +274,7 @@ echo "- Host: 0.0.0.0 (all interfaces)"
 echo "- WebSocket: Enabled with fallback to polling"
 echo ""
 echo "Next Steps:"
-echo "1. Configure Azure App Service startup command: 'python startup.py'"
+echo "1. Configure Azure App Service startup command: '$PYTHON_CMD startup.py'"
 echo "2. Enable WebSocket support in Azure App Service configuration"
 echo "3. Set any required environment variables"
 echo "4. Monitor application logs for successful startup"

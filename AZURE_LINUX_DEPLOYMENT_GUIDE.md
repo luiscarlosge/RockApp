@@ -90,7 +90,7 @@ az webapp config set \
 az webapp config set \
     --name "rock-app-linux" \
     --resource-group "rock-app-rg" \
-    --startup-file "python startup.py"
+    --startup-file "python3 startup.py"
 
 # Configure application settings
 az webapp config appsettings set \

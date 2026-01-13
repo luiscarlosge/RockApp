@@ -110,7 +110,7 @@ configure_web_app() {
     az webapp config set \
         --name "$APP_NAME" \
         --resource-group "$RESOURCE_GROUP" \
-        --startup-file "python startup.py"
+        --startup-file "python3 startup.py"
     
     # Configure application settings
     az webapp config appsettings set \
