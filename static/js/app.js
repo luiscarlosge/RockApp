@@ -305,6 +305,42 @@ class HamburgerMenuSystem {
             
             // Initialize section-specific functionality
             this.initializeSectionContent(sectionId);
+            
+            // Ensure menu state synchronization (Requirements 3.5)
+            this.ensureMenuStateSynchronization(sectionId);
+        }
+    }
+    
+    /**
+     * Ensure menu state is properly synchronized with current section
+     * @param {string} sectionId - The current section ID
+     */
+    ensureMenuStateSynchronization(sectionId) {
+        // Double-check that active menu item matches current section
+        const activeMenuItem = document.querySelector(`[data-section="${sectionId}"]`);
+        if (activeMenuItem) {
+            // Remove active class from all menu items
+            this.menuItems.forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            // Add active class to current section menu item
+            activeMenuItem.classList.add('active');
+            
+            // Update aria-current attribute for accessibility
+            this.menuItems.forEach(item => {
+                item.removeAttribute('aria-current');
+            });
+            activeMenuItem.setAttribute('aria-current', 'page');
+        }
+        
+        // Verify synchronization
+        const currentSection = this.getCurrentSection();
+        const activeMenu = document.querySelector('.menu-item.active');
+        
+        if (activeMenu && activeMenu.getAttribute('data-section') !== currentSection) {
+            console.warn('Menu state synchronization mismatch detected and corrected');
+            this.updateActiveMenuItem(); // Force re-sync
         }
     }
     
@@ -794,16 +830,17 @@ class MusicianSongSelector {
     navigateToMusicianSelector(musicianName) {
         /**
          * Navigate to musician selector section and pre-select the musician
+         * Enhanced with NavigationStateManager for better reliability
          */
-        // Use the hamburger menu system to navigate
-        if (window.hamburgerMenu) {
-            window.hamburgerMenu.goToSection('musician-selector');
-            
-            // Store the musician name to pre-select when the section loads
-            sessionStorage.setItem('preselectedMusician', musicianName);
-            
-            // Announce navigation to screen readers
-            this.announceToScreenReader(`Navegando al selector de músicos para ${musicianName}`);
+        if (window.NavigationStateManager) {
+            window.NavigationStateManager.navigateToMusicianFromSong(musicianName);
+        } else {
+            // Fallback to original implementation
+            if (window.hamburgerMenu) {
+                window.hamburgerMenu.goToSection('musician-selector');
+                sessionStorage.setItem('preselectedMusician', musicianName);
+                this.announceToScreenReader(`Navegando al selector de músicos para ${musicianName}`);
+            }
         }
     }
     
@@ -1346,24 +1383,25 @@ class MusicianSelector {
     navigateToSongSelector(songId) {
         /**
          * Navigate to song selector section and pre-select the song
+         * Enhanced with NavigationStateManager for better reliability
          */
-        // Use the hamburger menu system to navigate
-        if (window.hamburgerMenu) {
-            window.hamburgerMenu.goToSection('song-selector');
-            
-            // Store the song ID to pre-select when the section loads
-            sessionStorage.setItem('preselectedSong', songId);
-            
-            // Announce navigation to screen readers
-            this.announceToScreenReader(`Navegando al selector de canciones`);
-            
-            // Pre-select the song in the song selector
-            setTimeout(() => {
-                if (window.musicianSongSelector && window.musicianSongSelector.songSelect) {
-                    window.musicianSongSelector.songSelect.value = songId;
-                    window.musicianSongSelector.handleSongSelection(songId);
-                }
-            }, 300);
+        if (window.NavigationStateManager) {
+            window.NavigationStateManager.navigateToSongFromMusician(songId);
+        } else {
+            // Fallback to original implementation
+            if (window.hamburgerMenu) {
+                window.hamburgerMenu.goToSection('song-selector');
+                sessionStorage.setItem('preselectedSong', songId);
+                this.announceToScreenReader('Navegando al selector de canciones');
+                
+                // Pre-select the song in the song selector
+                setTimeout(() => {
+                    if (window.musicianSongSelector && window.musicianSongSelector.songSelect) {
+                        window.musicianSongSelector.songSelect.value = songId;
+                        window.musicianSongSelector.handleSongSelection(songId);
+                    }
+                }, 300);
+            }
         }
     }
     
@@ -1584,16 +1622,34 @@ class LivePerformanceManager {
             return;
         }
         
-        // Load initial performance state
-        this.loadPerformanceState();
+        // Initialize enhanced polling manager with 5-second intervals
+        this.enhancedPolling = new EnhancedPollingManager('/api/live-performance', {
+            interval: 5000, // 5 seconds (Requirements 2.1)
+            maxRetries: 3,
+            retryDelay: 1000,
+            onDataReceived: (data) => {
+                this.performanceState = data;
+                this.displayPerformanceState(data);
+            },
+            onError: (error, retryCount) => {
+                console.error(`Live performance polling error (attempt ${retryCount}):`, error);
+                if (retryCount >= 3) {
+                    this.showError(error.message || 'Error al cargar el estado de la presentación');
+                }
+            },
+            onCountdownUpdate: (remainingTime) => {
+                // Countdown is handled by the enhanced polling manager UI
+            },
+            onLoadingStateChange: (isLoading) => {
+                // Loading indicators are handled by the enhanced polling manager UI
+            }
+        });
         
-        // Set up auto-refresh every 30 seconds for real-time updates
-        this.refreshInterval = setInterval(() => {
-            this.loadPerformanceState();
-        }, 30000); // 30 seconds
+        // Start enhanced polling
+        this.enhancedPolling.startPolling();
         
         this.isInitialized = true;
-        console.log('Live Performance Manager initialized');
+        console.log('Live Performance Manager initialized with enhanced polling (5-second intervals)');
     }
     
     async loadPerformanceState() {
@@ -1768,8 +1824,25 @@ class LivePerformanceManager {
         return this.performanceState;
     }
     
+    // Public method to get enhanced polling status
+    getPollingStatus() {
+        return this.enhancedPolling ? this.enhancedPolling.getStatus() : null;
+    }
+    
+    // Public method to force immediate refresh
+    forceRefresh() {
+        if (this.enhancedPolling) {
+            this.enhancedPolling.forcePoll();
+        }
+    }
+    
     // Cleanup method
     destroy() {
+        if (this.enhancedPolling) {
+            this.enhancedPolling.destroy();
+            this.enhancedPolling = null;
+        }
+        
         if (this.refreshInterval) {
             clearInterval(this.refreshInterval);
             this.refreshInterval = null;
